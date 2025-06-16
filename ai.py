@@ -2,7 +2,7 @@
 import json
 import logging
 from config import logger
-from watsonx_utils import get_watsonx_token, watsonx_url, watsonx_project_id, watsonx_model_id
+# from watsonx_utils import get_watsonx_token, watsonx_url, watsonx_project_id, watsonx_model_id
 import requests
 
 def call_watsonx_api(prompt, watsonx_url, watsonx_project_id, watsonx_model_id, get_watsonx_token):

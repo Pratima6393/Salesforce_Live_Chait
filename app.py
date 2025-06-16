@@ -13,10 +13,11 @@ from config import (
     username,
     password,
     login_url,
-    watsonx_url,
-    watsonx_project_id,
-    watsonx_model_id
+    WATSONX_URL,
+    WATSONX_PROJECT_ID,
+    WATSONX_MODEL_ID
 )
+
 from watsonx_utils import (
     validate_watsonx_config,
     create_data_context,
@@ -224,9 +225,9 @@ def process_query(user_question):
         ai_summary_text, ai_structured_data = summarize_analysis_result_with_ai(
             backend_result,
             user_question,
-            watsonx_url,
-            watsonx_project_id,
-            watsonx_model_id,
+            WATSONX_URL,
+            WATSONX_PROJECT_ID,
+            WATSONX_MODEL_ID,
             get_watsonx_token
         )
         graph_data = ai_structured_data.get("graph_data", {})

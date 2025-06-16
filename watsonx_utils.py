@@ -3,21 +3,21 @@ import requests
 import json
 import re
 import pandas as pd
-from config import watsonx_api_key, watsonx_project_id, watsonx_url, watsonx_model_id, IBM_CLOUD_IAM_URL, logger
+from config import WATSONX_API_KEY, WATSONX_PROJECT_ID, WATSONX_URL, WATSONX_MODEL_ID, IBM_CLOUD_IAM_URL, logger
 
 def validate_watsonx_config():
     missing_configs = []
-    if not watsonx_api_key:
+    if not WATSONX_API_KEY:
         missing_configs.append("WATSONX_API_KEY")
-    if not watsonx_project_id:
+    if not WATSONX_PROJECT_ID:
         missing_configs.append("WATSONX_PROJECT_ID")
     if missing_configs:
         error_msg = f"Missing WatsonX configuration: {', '.join(missing_configs)}"
         logger.error(error_msg)
         return False, error_msg
-    if len(watsonx_api_key.strip()) < 10:
+    if len(WATSONX_API_KEY.strip()) < 10:
         return False, "WATSONX_API_KEY appears to be invalid (too short)"
-    if len(watsonx_project_id.strip()) < 10:
+    if len(WATSONX_PROJECT_ID.strip()) < 10:
         return False, "WATSONX_PROJECT_ID appears to be invalid (too short)"
     return True, "Configuration valid"
 
@@ -26,7 +26,7 @@ def get_watsonx_token():
     if not is_valid:
         raise ValueError(f"Configuration error: {validation_msg}")
     headers = {"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"}
-    data = {"grant_type": "urn:ibm:params:oauth:grant-type:apikey", "apikey": watsonx_api_key.strip()}
+    data = {"grant_type": "urn:ibm:params:oauth:grant-type:apikey", "apikey": WATSONX_API_KEY.strip()}
     logger.info("Requesting IBM Cloud IAM token...")
     try:
         response = requests.post(IBM_CLOUD_IAM_URL, headers=headers, data=data, timeout=90)
@@ -523,7 +523,7 @@ User Question: {user_question}
 Respond with valid JSON only.
 """
 
-        ml_url = f"{watsonx_url}/ml/v1/text/generation?version=2023-07-07"
+        ml_url = f"{WATSONX_URL}/ml/v1/text/generation?version=2023-07-07"
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
@@ -538,11 +538,11 @@ Respond with valid JSON only.
                 "repetition_penalty": 1.1,
                 "stop_sequences": ["\n\n"]
             },
-            "model_id": watsonx_model_id,
-            "project_id": watsonx_project_id
+            "model_id": WATSONX_MODEL_ID,
+            "project_id": WATSONX_PROJECT_ID
         }
 
-        logger.info(f"Querying WatsonX AI with model: {watsonx_model_id}")
+        logger.info(f"Querying WatsonX AI with model: {WATSONX_MODEL_ID}")
         response = requests.post(ml_url, headers=headers, json=body, timeout=90)
 
         if response.status_code != 200:
