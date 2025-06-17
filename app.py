@@ -493,7 +493,7 @@ def process_user_query(user_question: str):
                     st.info("No numeric data found for graph.")
 
 def main():
-    user_input = st.text_input("Ask your question about leads, sales, projects, etc.", key="user_input")
+    user_input = st.text_input("Ask your question about leads, sales, projects, etc. (Total Lead = 30777)", key="user_input")
     if user_input:
         st.session_state.conversation.append({"role": "user", "content": user_input})
         process_user_query(user_input)
