@@ -312,7 +312,7 @@ ALL_PROJECTS = set([
     "wave city", "wave estate", "wmcc"
 ])
 
-st.title("🤖 Wave Group (CRM-BOT)")
+st.title("🤖 Wave Group (CRM Analytics Chat)")
 st.markdown("*Welcome To Wave, How May I help you?*")
 
 if st.button("🧹 Clear Chat"):
