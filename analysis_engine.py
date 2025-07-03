@@ -1,5 +1,4 @@
 
-# #===================================new code for the funnel graph===============
 # import streamlit as st
 # import pandas as pd
 # import datetime
@@ -8,6 +7,12 @@
 # import plotly.graph_objects as go
 # from config import logger, FIELD_TYPES, FIELD_DISPLAY_NAMES
 # from pytz import timezone
+
+# col_display_name = {
+#         "Name": "User",
+#         "Department": "Department",
+#         "Meeting_Done_Count": "Completed Meetings"
+#         }
 
 # def execute_analysis(analysis_plan, leads_df, users_df, cases_df, events_df, opportunities_df, task_df, user_question=""):
 #     """
@@ -40,22 +45,37 @@
 #         else:
 #             logger.error(f"Unsupported object_type: {object_type}")
 #             return {"type": "error", "message": f"Unsupported object type: {object_type}"}
+#         # Add validation step before filtering to ensure data is present
+#         if object_type == "opportunity" and (df.empty or 'Sales_Team_Feedback__c' not in df.columns):
+#             logger.error(f"{object_type}_df is empty or missing Sales_Team_Feedback__c: {df.columns}")
+#             return {"type": "error", "message": f"No {object_type} data or required column missing"}
 
 #         if df.empty:
 #             logger.error(f"No {object_type} data available")
 #             return {"type": "error", "message": f"No {object_type} data available"}
+
+#         #==================================new code=====================
+#         # Detect specific query types
+#         #product_keywords = ["product sale", "product split", "sale"]
+#         source_keywords = ["source-wise", "lead source"]
+#         project_keywords = ["project-wise", "project"]
+#         user_keywords = ["user-wise", "user based", "employee-wise"]
         
-#         #=================================new code for the lead_versus_opportunity=========
+#         #is_product_related = any(keyword in user_question.lower() for keyword in product_keywords)
+#         is_source_related = any(keyword in user_question.lower() for keyword in source_keywords)
+#         is_project_related = any(keyword in user_question.lower() for keyword in project_keywords)
+#         is_user_related = any(keyword in user_question.lower() for keyword in user_keywords)
+#         #==================================end of code=====================
+
 #         # Validate fields for opportunity_vs_lead analysis
 #         if analysis_type in ["opportunity_vs_lead", "opportunity_vs_lead_percentage"]:
-#             required_fields = ["Lead_Converted__c", "Id"]
+#             required_fields = ["Customer_Feedback__c", "Id"] 
 #             missing_fields = [f for f in required_fields if f not in df.columns]
 #             if missing_fields:
 #                 logger.error(f"Missing fields for {analysis_type}: {missing_fields}")
 #                 return {"type": "error", "message": f"Missing fields: {missing_fields}"}
-#         #=================================end for the the versus_opportunity==============
 
-#         if analysis_type in ["distribution", "top", "percentage", "quarterly_distribution", "source_wise_funnel", "conversion_funnel"] and not fields:
+#         if analysis_type in ["distribution", "top", "percentage", "quarterly_distribution", "source_wise", "conversion_funnel"] and not fields:
 #             fields = list(filters.keys()) if filters else []
 #             if not fields:
 #                 logger.error(f"No fields specified for {analysis_type} analysis")
@@ -63,10 +83,10 @@
 
 #         # Detect specific query types
 #         product_keywords = ["product sale", "product split", "sale"]
-#         sales_keywords = ["sale", "sales"]
+#         sales_keywords = ["sale", "sales", "project-wise sale", "source-wise sale", "lead source subcategory with sale"]
+        
 #         is_product_related = any(keyword in user_question.lower() for keyword in product_keywords)
 #         is_sales_related = any(keyword in user_question.lower() for keyword in sales_keywords)
-#         is_disqualification_reason = "disqualification reason" in user_question.lower()
 
 #         # Adjust fields for product-related and sales-related queries
 #         if is_product_related and object_type == "lead":
@@ -80,19 +100,27 @@
 #                 fields.append("Project_Category__c")
 #             if "Status" not in fields:
 #                 fields.append("Status")
-#             if analysis_type not in ["source_wise_funnel", "distribution", "quarterly_distribution"]:
+#             if analysis_type not in ["source_wise", "distribution", "quarterly_distribution"]:
 #                 analysis_type = "distribution"
 #                 analysis_plan["analysis_type"] = "distribution"
 #             analysis_plan["fields"] = fields
 
-#         if is_sales_related and object_type == "lead":
-#             logger.info(f"Detected sales-related question: '{user_question}'. Including Lead_Converted__c.")
-#             if "Lead_Converted__c" not in df.columns:
-#                 logger.error("Lead_Converted__c column not found")
-#                 return {"type": "error", "message": "Lead_Converted__c column not found"}
-#             if "Lead_Converted__c" not in fields:
-#                 fields.append("Lead_Converted__c")
-#             analysis_plan["fields"] = fields
+#         if is_sales_related and object_type == "opportunity":
+#             logger.info(f"Detected sales-related question: '{user_question}'. Filtering Sales_Order_Number__c first.")
+#             if "Sales_Order_Number__c" not in df.columns:
+#                 logger.error("Sales_Order_Number__c column not found")
+#                 return {"type": "error", "message": "Sales_Order_Number__c column not found"}
+#             # First filter to exclude None values in Sales_Order_Number__c
+#             df = df[df["Sales_Order_Number__c"].notna() & (df["Sales_Order_Number__c"] != "None")]
+#             logger.info(f"Opportunities after filtering None Sales_Order_Number__c: {len(df)}")
+#             # Then apply additional product/project filters if specified
+#             if "Project_Category__c" in fields or any(f in filters for f in ["Project_Category__c", "Project"]):
+#                 if "Project_Category__c" not in fields:
+#                     fields.append("Project_Category__c")
+#                 analysis_plan["fields"] = fields
+#             if analysis_type not in ["distribution", "quarterly_distribution"]:
+#                 analysis_type = "distribution"
+#                 analysis_plan["analysis_type"] = "distribution"
 
 #         # Copy the dataframe to avoid modifying the original
 #         filtered_df = df.copy()
@@ -155,8 +183,8 @@
 #                 logger.error(f"Filter field {field} not in columns: {list(df.columns)}")
 #                 return {"type": "error", "message": f"Field {field} not found"}
 #             if isinstance(value, str):
-#                 if field in ["Status", "Rating", "Customer_Feedback__c", "LeadSource", "Lead_Source_Sub_Category__c", "Appointment_Status__c", "StageName"]:
-#                     filtered_df = filtered_df[filtered_df[field] == value]
+#                 if field in ["Status", "Rating", "Customer_Feedback__c", "LeadSource", "Lead_Source_Sub_Category__c", "Appointment_Status__c", "StageName", "Sales_Team_Feedback__c"]:
+#                     filtered_df = filtered_df[filtered_df[field].str.lower() == value.lower()]
 #                 else:
 #                     filtered_df = filtered_df[filtered_df[field].str.contains(value, case=False, na=False)]
 #             elif isinstance(value, list):
@@ -224,12 +252,10 @@
 #                 logger.info(f"Graph data for {field}: {graph_data[field]}")
 
 #         # Handle different analysis types
-        
+       
 #         if analysis_type == "opportunity_vs_lead":
 #             if object_type == "lead":
-#                 # Calculate total leads before applying filters
-#                 total_leads = len(df)  # Use the unfiltered DataFrame
-#                 # Apply filters (including quarter) for opportunities
+#                 # Apply filters (including quarter) to get filtered dataset
 #                 filtered_df = df.copy()
 #                 for field, value in filters.items():
 #                     if field not in filtered_df.columns:
@@ -250,13 +276,13 @@
 #                         (filtered_df['CreatedDate'] >= quarter["start"]) &
 #                         (filtered_df['CreatedDate'] <= quarter["end"])
 #                     ]
-#                 opportunities = len(filtered_df[filtered_df["Lead_Converted__c"] == True])
+#                 # Calculate opportunities from the filtered dataset
+#                 opportunities = len(filtered_df[filtered_df["Customer_Feedback__c"] == "Interested"])
+#                 logger.info(f"Opportunities count after filter {selected_quarter if selected_quarter else 'all data'}: {opportunities}")
 #                 data = [
-#                     {"Category": "Total Leads", "Count": total_leads},
 #                     {"Category": "Opportunities", "Count": opportunities}
 #                 ]
 #                 graph_data["Opportunity vs Lead"] = {
-#                     "Total Leads": total_leads,
 #                     "Opportunities": opportunities
 #                 }
 #                 return {
@@ -266,12 +292,147 @@
 #                     "filtered_data": filtered_df,
 #                     "selected_quarter": selected_quarter
 #                 }
+        
+#         # New user_sales_summary analysis type
+#         elif analysis_type == "user_sales_summary" and object_type == "opportunity":
+#             required_fields_opp = ["OwnerId", "Sales_Order_Number__c"]
+#             missing_fields_opp = [f for f in required_fields_opp if f not in opportunities_df.columns]
+#             if missing_fields_opp:
+#                 logger.error(f"Missing fields in opportunities_df for user_sales_summary: {missing_fields_opp}")
+#                 return {"type": "error", "message": f"Missing fields in opportunities_df: {missing_fields_opp}"}
 
+#             if users_df.empty or "Id" not in users_df.columns or "Name" not in users_df.columns:
+#                 logger.error("Users DataFrame is missing or lacks required columns (Id, Name)")
+#                 return {"type": "error", "message": "Users data is missing or lacks Id or Name columns"}
+
+#             # Filter opportunities by quarter if specified
+#             filtered_opp = opportunities_df.copy()
+#             if selected_quarter and 'CreatedDate' in filtered_opp.columns:
+#                 quarter = quarters.get(selected_quarter)
+#                 filtered_opp['CreatedDate'] = pd.to_datetime(filtered_opp['CreatedDate'], utc=True, errors='coerce')
+#                 filtered_opp = filtered_opp[
+#                     (filtered_opp['CreatedDate'] >= quarter["start"]) &
+#                     (filtered_opp['CreatedDate'] <= quarter["end"])
+#                 ]
+
+#             # Merge with users_df to get user names
+#             merged_df = filtered_opp.merge(
+#                 users_df[["Id", "Name"]],
+#                 left_on="OwnerId",
+#                 right_on="Id",
+#                 how="left"
+#             )
+
+#             # Group by user name and count sales orders
+#             sales_counts = merged_df.groupby("Name")["Sales_Order_Number__c"].count().reset_index(name="Sales_Order_Count")
+#             sales_counts = sales_counts.sort_values(by="Sales_Order_Count", ascending=False)
+#             total_sales = len(merged_df)
+
+#             # Prepare graph data
+#             graph_data["User_Sales"] = sales_counts.set_index("Name")["Sales_Order_Count"].to_dict()
+
+#             return {
+#                 "type": "user_sales_summary",
+#                 "data": sales_counts.to_dict(orient="records"),
+#                 "columns": ["Name", "Sales_Order_Count"],
+#                 "total": total_sales if not sales_counts.empty else 0,
+#                 "graph_data": graph_data,
+#                 "filtered_data": merged_df,
+#                 "selected_quarter": selected_quarter
+#             }
+            
+#         if selected_quarter:
+#             start_date = quarters[selected_quarter]["start"]
+#             end_date = quarters[selected_quarter]["end"]
+#             if object_type == "event" and "CreatedDate" in events_df.columns:
+#                 events_df = events_df[(pd.to_datetime(events_df["CreatedDate"], utc=True) >= start_date) & (pd.to_datetime(events_df["CreatedDate"], utc=True) <= end_date)]
+
+#         if object_type == "event":
+#             if analysis_type == "user_meeting_summary":
+#                 required_fields_events = ["OwnerId", "Appointment_Status__c"]
+#                 missing_fields_events = [f for f in required_fields_events if f not in events_df.columns]
+#                 if missing_fields_events:
+#                     logger.error(f"Missing fields in events_df for user_meeting_summary: {missing_fields_events}")
+#                     return {"type": "error", "message": f"Missing fields in events_df: {missing_fields_events}"}
+
+#                 if users_df.empty or "Id" not in users_df.columns or "Name" not in users_df.columns:
+#                     logger.error("Users DataFrame is missing or lacks required columns (Id, Name)")
+#                     return {"type": "error", "message": "Users data is missing or lacks Id or Name columns"}
+
+#             # Filter for completed meetings
+#                 completed_events = events_df[events_df["Appointment_Status__c"].str.lower() == "completed"]
+
+#             # Merge with users_df to get only Name, excluding Department
+#                 merged_df = completed_events.merge(
+#                     users_df[["Id", "Name"]],
+#                     left_on="OwnerId",
+#                     right_on="Id",
+#                     how="left"
+#                 )
+
+#             # Group by User Name only
+#                 user_counts = merged_df.groupby("Name").size().reset_index(name="Meeting_Done_Count")
+#                 user_counts = user_counts.sort_values(by="Meeting_Done_Count", ascending=False)
+#                 total_meetings = len(merged_df)
+
+#             # Prepare graph data
+#                 graph_data["User_Meeting_Done"] = user_counts.set_index("Name")["Meeting_Done_Count"].to_dict()
+
+#                 return {
+#                     "type": "user_meeting_summary",
+#                     "data": user_counts.to_dict(orient="records"),
+#                     "columns": ["Name", "Meeting_Done_Count"],  # Explicitly exclude Department
+#                     "total": total_meetings if not user_counts.empty else 0,
+#                     "graph_data": graph_data,
+#                     "filtered_data": merged_df,
+#                     "selected_quarter": selected_quarter
+#                 }
+        
+#             elif analysis_type == "dept_user_meeting_summary" and object_type == "event":
+#                     required_fields_events = ["OwnerId", "Appointment_Status__c"]
+#                     missing_fields_events = [f for f in required_fields_events if f not in events_df.columns]
+#                     if missing_fields_events:
+#                         logger.error(f"Missing fields in events_df for dept_user_meeting_summary: {missing_fields_events}")
+#                         return {"type": "error", "message": f"Missing fields in events_df: {missing_fields_events}"}
+
+#                     if users_df.empty or "Id" not in users_df.columns or "Name" not in users_df.columns or "Department" not in users_df.columns:
+#                         logger.error("Users DataFrame is missing or lacks required columns (Id, Name, Department)")
+#                         return {"type": "error", "message": "Users data is missing or lacks Id, Name, or Department columns"}
+
+#                 # Filter for completed meetings
+#                     completed_events = events_df[events_df["Appointment_Status__c"].str.lower() == "completed"]
+
+#                 # Merge with users_df to get only Department
+#                     merged_df = completed_events.merge(
+#                         users_df[["Id", "Department"]],
+#                         left_on="OwnerId",
+#                         right_on="Id",
+#                         how="left"
+#                     )
+
+#                 # Group by Department only, then count
+#                     dept_counts = merged_df.groupby("Department").size().reset_index(name="Meeting_Done_Count")
+#                     dept_counts = dept_counts.sort_values(by="Meeting_Done_Count", ascending=False)
+#                     total_meetings = len(merged_df)
+
+#                 # Prepare graph data (using only Department as index)
+#                     graph_data["Dept_Meeting_Done"] = dept_counts.set_index("Department")["Meeting_Done_Count"].to_dict()
+
+#                     return {
+#                         "type": "dept_user_meeting_summary",
+#                         "data": dept_counts.to_dict(orient="records"),
+#                         "columns": ["Department", "Meeting_Done_Count"],  # Only Department and count
+#                         "total": total_meetings if not dept_counts.empty else 0,
+#                         "graph_data": graph_data,
+#                         "filtered_data": merged_df,
+#                         "selected_quarter": selected_quarter
+#                     }
+        
 #         # Handle opportunity_vs_lead_percentage analysis
 #         elif analysis_type == "opportunity_vs_lead_percentage":
 #             if object_type == "lead":
 #                 total_leads = len(filtered_df)
-#                 opportunities = len(filtered_df[filtered_df["Lead_Converted__c"] == True])
+#                 opportunities = len(filtered_df[filtered_df["Customer_Feedback__c"] == "Interested"])  
 #                 percentage = (opportunities / total_leads * 100) if total_leads > 0 else 0
 #                 graph_data["Opportunity vs Lead"] = {
 #                     "Opportunities": percentage,
@@ -280,14 +441,15 @@
 #                 return {
 #                     "type": "percentage",
 #                     "value": round(percentage, 1),
-#                     "label": "Percentage of Leads Converted to Opportunities",
+#                     "label": "Percentage of Leads Marked as Interested",
 #                     "graph_data": graph_data,
 #                     "filtered_data": filtered_df,
 #                     "selected_quarter": selected_quarter
 #                 }
 #             return {"type": "error", "message": f"Opportunity vs Lead percentage analysis not supported for {object_type}"}
-        
+
 #         elif analysis_type == "count":
+#             #filtered_df = df[df["Appointment_Status__c"].str.lower() == "completed"].copy()
 #             return {
 #                 "type": "metric",
 #                 "value": len(filtered_df),
@@ -304,10 +466,7 @@
 #                 return {"type": "error", "message": f"No data available for {object_type}"}
 #             if field not in df.columns:
 #                 return {"type": "error", "message": f"Field {field} not found in {object_type} data"}
-#             # df = df[df[field].notna()]
-#             # disqual_counts = df[field].value_counts()
-#             # total = disqual_counts.sum()
-#             # ✅ Filter out None, NaN, empty strings, and "None" (as string)
+
 #             filtered_df = df[df[field].notna() & (df[field] != "") & (df[field].astype(str).str.lower() != "none")]
 
 #             # Generate counts and percentages
@@ -380,8 +539,6 @@
 #                 "filtered_data": filtered_df,
 #                 "selected_quarter": selected_quarter
 #             }
-            
-        
 
 #         elif analysis_type == "recent":
 #             if 'CreatedDate' in filtered_df.columns:
@@ -407,33 +564,20 @@
 #             return {"type": "error", "message": "CreatedDate field required for recent analysis"}
 
 #         elif analysis_type == "distribution":
-#             valid_fields = [f for f in fields if f in df.columns]
+#             valid_fields = [f for f in fields if f in filtered_df.columns]
 #             if not valid_fields:
 #                 return {"type": "error", "message": f"No valid fields for distribution: {fields}"}
 #             result_data = {}
-#             if is_product_related and object_type == "lead":
-#                 if is_sales_related:
-#                     sales_data = filtered_df.groupby(["Project_Category__c", "Lead_Converted__c"]).size().reset_index(name="Count")
-#                     result_data["Project_Category__c_Lead_Converted__c"] = sales_data.to_dict(orient="records")
-#                     for field in ["Project_Category__c", "Lead_Converted__c"]:
-#                         graph_data[field] = filtered_df[field].dropna().value_counts().to_dict()
-#                 else:
-#                     funnel_data = filtered_df.groupby(["Project_Category__c", "Status"]).size().reset_index(name="Count")
-#                     result_data["Project_Category__c_Status"] = funnel_data.to_dict(orient="records")
-#                     for field in ["Project_Category__c", "Status"]:
-#                         graph_data[field] = filtered_df[field].dropna().value_counts().to_dict()
-#             else:
-#                 for field in valid_fields:
-#                     filtered_df = filtered_df[filtered_df[field].notna() & (filtered_df[field].astype(str).str.lower() != 'none')]
-#                     total = len(filtered_df)
-#                     value_counts = filtered_df[field].value_counts().head(10)
-#                     percentages = (value_counts / total * 100).round(2)
-#                     result_data[field] = {
-#                         "counts": value_counts.to_dict(),
-#                         "percentages": percentages.to_dict()
-#                     }
-#                     graph_data[field] = value_counts.to_dict()
-
+#             for field in valid_fields:
+#                 filtered_df = filtered_df[filtered_df[field].notna() & (filtered_df[field].astype(str).str.lower() != 'none')]
+#                 total = len(filtered_df)
+#                 value_counts = filtered_df[field].value_counts()
+#                 percentages = (value_counts / total * 100).round(2)
+#                 result_data[field] = {
+#                     "counts": value_counts.to_dict(),
+#                     "percentages": percentages.to_dict()
+#                 }
+#                 graph_data[field] = value_counts.to_dict()
 #             return {
 #                 "type": "distribution",
 #                 "fields": valid_fields,
@@ -468,11 +612,11 @@
 #                 dist = filtered_df[field].value_counts().to_dict()
 #                 dist = {str(k): v for k, v in dist.items()}
 #                 logger.info(f"Distribution for {field} in {selected_quarter}: {dist}")
-#                 if object_type == "lead" and field == "Lead_Converted__c":
-#                     if 'True' not in dist:
-#                         dist['True'] = 0
-#                     if 'False' not in dist:
-#                         dist['False'] = 0
+#                 if object_type == "lead" and field == "Customer_Feedback__c":
+#                     if 'Interested' not in dist:
+#                         dist['Interested'] = 0
+#                     if 'Not Interested' not in dist:
+#                         dist['Not Interested'] = 0
 #                 quarterly_data[selected_quarter] = dist
 #                 quarterly_graph_data[field] = dist
 #                 for filter_field in filters.keys():
@@ -492,7 +636,7 @@
 #                 }
 #             return {"type": "error", "message": f"Quarterly distribution requires {object_type} data with CreatedDate"}
 
-#         elif analysis_type == "source_wise_funnel":
+#         elif analysis_type == "source_wise_lead":
 #             if object_type == "lead":
 #                 required_fields = ["LeadSource"]
 #                 missing_fields = [f for f in required_fields if f not in filtered_df.columns]
@@ -501,7 +645,7 @@
 #                 funnel_data = filtered_df.groupby(required_fields).size().reset_index(name="Count")
 #                 graph_data["LeadSource"] = funnel_data.set_index("LeadSource")["Count"].to_dict()
 #                 return {
-#                     "type": "source_wise_funnel",
+#                     "type": "source_wise_lead",
 #                     "fields": fields,
 #                     "funnel_data": funnel_data,
 #                     "graph_data": graph_data,
@@ -510,91 +654,339 @@
 #                     "selected_quarter": selected_quarter
 #                 }
 #             return {"type": "error", "message": f"Source-wise funnel not supported for {object_type}"}
-
         
-#         #======================================new code=================
-#         elif analysis_type == "conversion_funnel":
-#             if object_type == "lead":
-#                 required_fields = ["Customer_Feedback__c", "Status", "Is_Appointment_Booked__c"]
-#                 missing_fields = [f for f in required_fields if f not in filtered_df.columns]
-#                 if missing_fields:
-#                     logger.error(f"Missing fields for conversion_funnel: {missing_fields}")
-#                     return {"type": "error", "message": f"Missing fields: {missing_fields}"}
-                
-#                 filtered_events = events_df.copy()
-#                 for field, value in filters.items():
-#                     if field in filtered_events.columns:
-#                         if isinstance(value, str):
-#                             filtered_events = filtered_events[filtered_events[field] == value]
-#                         elif isinstance(value, dict):
-#                             if field == "CreatedDate":
-#                                 if "$gte" in value:
-#                                     gte_value = pd.to_datetime(value["$gte"], utc=True)
-#                                     filtered_events = filtered_events[filtered_events[field] >= gte_value]
-#                                 if "$lte" in value:
-#                                     lte_value = pd.to_datetime(value["$lte"], utc=True)
-#                                     filtered_events = filtered_events[filtered_events[field] <= lte_value]
-                
+#         # # Handle conversion funnel analysis
+#         # if analysis_type == "conversion_funnel":
+#         #     if object_type == "lead":
+#         #         required_fields = ["Customer_Feedback__c", "Status", "Is_Appointment_Booked__c"]
+#         #         missing_fields = [f for f in required_fields if f not in filtered_df.columns]
+#         #         if missing_fields:
+#         #             return {"type": "error", "message": f"Missing fields: {missing_fields}"}
+
+#         #         filtered_events = events_df.copy()
+#         #         for field, value in filters.items():
+#         #             if field in filtered_events.columns:
+#         #                 if isinstance(value, str):
+#         #                     filtered_events = filtered_events[filtered_events[field] == value]
+#         #                 elif isinstance(value, dict):
+#         #                     if field == "CreatedDate":
+#         #                         if "$gte" in value:
+#         #                             gte_value = pd.to_datetime(value["$gte"], utc=True)
+#         #                             filtered_events = filtered_events[filtered_events[field] >= gte_value]
+#         #                         if "$lte" in value:
+#         #                             lte_value = pd.to_datetime(value["$lte"], utc=True)
+#         #                             filtered_events = filtered_events[filtered_events[field] <= lte_value]
+
+#         #         total_leads = len(filtered_df)
+#         #         valid_leads = len(filtered_df[filtered_df["Customer_Feedback__c"] != 'Junk'])
+#         #         sol_leads = len(filtered_df[filtered_df["Status"] == "Qualified"])
+#         #         meeting_booked = len(filtered_df[
+#         #             (filtered_df["Status"] == "Qualified") & (filtered_df["Is_Appointment_Booked__c"] == True)
+#         #         ])
+#         #         meeting_done = len(filtered_events[filtered_events["Appointment_Status__c"] == "Completed"])
+#         #         disqualified_leads = len(filtered_df[filtered_df["Customer_Feedback__c"] == "Not Interested"])
+#         #         open_leads = len(filtered_df[filtered_df["Status"].isin(["New", "Nurturing"])])
+#         #         junk_percentage = ((total_leads - valid_leads) / total_leads * 100) if total_leads > 0 else 0
+#         #         vl_sol_ratio = (valid_leads / sol_leads) if sol_leads > 0 else "N/A"
+#         #         sol_mb_ratio = (sol_leads / meeting_booked) if meeting_booked > 0 else "N/A"
+#         #         meeting_booked_meeting_done = (meeting_done / meeting_booked) if meeting_done > 0 else "N/A"
+#         #         sale_done = len(opportunities_df[opportunities_df["Sales_Order_Number__c"].notna() & (opportunities_df["Sales_Order_Number__c"] != "None")])
+#         #         md_sd_ratio = (meeting_done / sale_done) if sale_done > 0 else "N/A"
+
+#         #         # Apply user-based filtering if specified
+#         #         if is_user_related and "OwnerId" in filtered_df.columns and not users_df.empty:
+#         #             filtered_df = filtered_df.merge(users_df[["Id", "Name"]], left_on="OwnerId", right_on="Id", how="left")
+#         #             if "Name" in filters:
+#         #                 filtered_df = filtered_df[filtered_df["Name"] == filters["Name"]]
+#         #             total_leads = len(filtered_df)
+#         #             valid_leads = len(filtered_df[filtered_df["Customer_Feedback__c"] != 'Junk'])
+#         #             sol_leads = len(filtered_df[filtered_df["Status"] == "Qualified"])
+#         #             meeting_booked = len(filtered_df[
+#         #                 (filtered_df["Status"] == "Qualified") & (filtered_df["Is_Appointment_Booked__c"] == True)
+#         #             ])
+#         #             meeting_done = len(filtered_events[filtered_events["OwnerId"].isin(filtered_df["OwnerId"]) & (filtered_events["Appointment_Status__c"] == "Completed")])
+#         #             disqualified_leads = len(filtered_df[filtered_df["Customer_Feedback__c"] == "Not Interested"])
+#         #             open_leads = len(filtered_df[filtered_df["Status"].isin(["New", "Nurturing"])])
+#         #             junk_percentage = ((total_leads - valid_leads) / total_leads * 100) if total_leads > 0 else 0
+#         #             vl_sol_ratio = (valid_leads / sol_leads) if sol_leads > 0 else "N/A"
+#         #             sol_mb_ratio = (sol_leads / meeting_booked) if meeting_booked > 0 else "N/A"
+#         #             meeting_booked_meeting_done = (meeting_done / meeting_booked) if meeting_done > 0 else "N/A"
+#         #             sale_done = len(opportunities_df[
+#         #                 (opportunities_df["OwnerId"].isin(filtered_df["OwnerId"])) & 
+#         #                 (opportunities_df["Sales_Order_Number__c"].notna()) & 
+#         #                 (opportunities_df["Sales_Order_Number__c"] != "None")
+#         #             ])
+#         #             md_sd_ratio = (meeting_done / sale_done) if sale_done > 0 else "N/A"
+
+#         #         # Apply product-based filtering if specified
+#         #         elif is_product_related and "Project_Category__c" in filtered_df.columns:
+#         #             if "Project_Category__c" in filters:
+#         #                 filtered_df = filtered_df[filtered_df["Project_Category__c"] == filters["Project_Category__c"]]
+#         #             total_leads = len(filtered_df)
+#         #             valid_leads = len(filtered_df[filtered_df["Customer_Feedback__c"] != 'Junk'])
+#         #             sol_leads = len(filtered_df[filtered_df["Status"] == "Qualified"])
+#         #             meeting_booked = len(filtered_df[
+#         #                 (filtered_df["Status"] == "Qualified") & (filtered_df["Is_Appointment_Booked__c"] == True)
+#         #             ])
+#         #             meeting_done = len(filtered_events[filtered_events["Project_Category__c"] == filters["Project_Category__c"]] 
+#         #                             [filtered_events["Appointment_Status__c"] == "Completed"])
+#         #             disqualified_leads = len(filtered_df[filtered_df["Customer_Feedback__c"] == "Not Interested"])
+#         #             open_leads = len(filtered_df[filtered_df["Status"].isin(["New", "Nurturing"])])
+#         #             junk_percentage = ((total_leads - valid_leads) / total_leads * 100) if total_leads > 0 else 0
+#         #             vl_sol_ratio = (valid_leads / sol_leads) if sol_leads > 0 else "N/A"
+#         #             sol_mb_ratio = (sol_leads / meeting_booked) if meeting_booked > 0 else "N/A"
+#         #             meeting_booked_meeting_done = (meeting_done / meeting_booked) if meeting_done > 0 else "N/A"
+#         #             sale_done = len(opportunities_df[
+#         #                 (opportunities_df["Project_Category__c"] == filters["Project_Category__c"]) & 
+#         #                 (opportunities_df["Sales_Order_Number__c"].notna()) & 
+#         #                 (opportunities_df["Sales_Order_Number__c"] != "None")
+#         #             ])
+#         #             md_sd_ratio = (meeting_done / sale_done) if sale_done > 0 else "N/A"
+
+#         #         # Apply source-based filtering if specified
+#         #         elif is_source_related and "LeadSource" in filtered_df.columns:
+#         #             if "LeadSource" in filters:
+#         #                 filtered_df = filtered_df[filtered_df["LeadSource"] == filters["LeadSource"]]
+#         #             total_leads = len(filtered_df)
+#         #             valid_leads = len(filtered_df[filtered_df["Customer_Feedback__c"] != 'Junk'])
+#         #             sol_leads = len(filtered_df[filtered_df["Status"] == "Qualified"])
+#         #             meeting_booked = len(filtered_df[
+#         #                 (filtered_df["Status"] == "Qualified") & (filtered_df["Is_Appointment_Booked__c"] == True)
+#         #             ])
+#         #             meeting_done = len(filtered_events[filtered_events["LeadSource"] == filters["LeadSource"]] 
+#         #                             [filtered_events["Appointment_Status__c"] == "Completed"])
+#         #             disqualified_leads = len(filtered_df[filtered_df["Customer_Feedback__c"] == "Not Interested"])
+#         #             open_leads = len(filtered_df[filtered_df["Status"].isin(["New", "Nurturing"])])
+#         #             junk_percentage = ((total_leads - valid_leads) / total_leads * 100) if total_leads > 0 else 0
+#         #             vl_sol_ratio = (valid_leads / sol_leads) if sol_leads > 0 else "N/A"
+#         #             sol_mb_ratio = (sol_leads / meeting_booked) if meeting_booked > 0 else "N/A"
+#         #             meeting_booked_meeting_done = (meeting_done / meeting_booked) if meeting_done > 0 else "N/A"
+#         #             sale_done = len(opportunities_df[
+#         #                 (opportunities_df["LeadSource"] == filters["LeadSource"]) & 
+#         #                 (opportunities_df["Sales_Order_Number__c"].notna()) & 
+#         #                 (opportunities_df["Sales_Order_Number__c"] != "None")
+#         #             ])
+#         #             md_sd_ratio = (meeting_done / sale_done) if sale_done > 0 else "N/A"
+
+#         #         funnel_metrics = {
+#         #             "TL:VL Ratio": round(vl_sol_ratio, 2) if isinstance(vl_sol_ratio, (int, float)) else vl_sol_ratio,
+#         #             "VL:SOL Ratio": round(vl_sol_ratio, 2) if isinstance(vl_sol_ratio, (int, float)) else vl_sol_ratio,
+#         #             "SOL:MB Ratio": round(sol_mb_ratio, 2) if isinstance(sol_mb_ratio, (int, float)) else sol_mb_ratio,
+#         #             "MB:MD Ratio": round(meeting_booked_meeting_done, 2) if isinstance(meeting_booked_meeting_done, (int, float)) else meeting_booked_meeting_done,
+#         #             "MD:SD Ratio": round(md_sd_ratio, 2) if isinstance(md_sd_ratio, (int, float)) else md_sd_ratio,
+#         #         }
+#         #         graph_data["Funnel Stages"] = {
+#         #             "Total Leads": total_leads,
+#         #             "Valid Leads": valid_leads,
+#         #             "Sales Opportunity Leads (SOL)": sol_leads,
+#         #             "Meeting Booked": meeting_booked,
+#         #             "Meeting Done": meeting_done,
+#         #             "Sale Done": sale_done
+#         #         }
+#         #         return {
+#         #             "type": "conversion_funnel",
+#         #             "funnel_metrics": funnel_metrics,
+#         #             "quarterly_data": {selected_quarter: {
+#         #                 "Total Leads": total_leads,
+#         #                 "Valid Leads": valid_leads,
+#         #                 "Sales Opportunity Leads (SOL)": sol_leads,
+#         #                 "Meeting Booked": meeting_booked,
+#         #                 "Disqualified Leads": disqualified_leads,
+#         #                 "Disqualified %": round((disqualified_leads / total_leads * 100), 2) if total_leads > 0 else 0,
+#         #                 "Open Leads": open_leads,
+#         #                 "Junk %": round(junk_percentage, 2),
+#         #                 "VL:SOL Ratio": round(vl_sol_ratio, 2) if isinstance(vl_sol_ratio, (int, float)) else vl_sol_ratio,
+#         #                 "SOL:MB Ratio": round(sol_mb_ratio, 2) if isinstance(sol_mb_ratio, (int, float)) else sol_mb_ratio,
+#         #                 "MD:SD Ratio": round(md_sd_ratio, 2) if isinstance(md_sd_ratio, (int, float)) else md_sd_ratio
+#         #             }},
+#         #             "graph_data": graph_data,
+#         #             "filtered_data": filtered_df,
+#         #             "is_user_related": is_user_related,
+#         #             "is_product_related": is_product_related,
+#         #             "is_source_related": is_source_related,
+#         #             "is_project_related": is_project_related,
+#         #             "selected_quarter": selected_quarter
+#         #         }
+#         #     return {"type": "error", "message": f"Conversion funnel not supported for {object_type}"}
+
+
+#         elif analysis_type in ["product_wise_funnel", "user_wise_funnel", "source_wise_funnel", "conversion_funnel"]:
+#             if object_type != "lead":
+#                 return {"type": "error", "message": f"{analysis_type} not supported for {object_type}"}
+
+#             required_fields = ["Customer_Feedback__c", "Status", "Is_Appointment_Booked__c"]
+#             if analysis_type == "product_wise_funnel":
+#                 required_fields.append("Project_Category__c")
+#                 group_by = "Project_Category__c"
+#                 all_categories = ['EDEN', 'ELIGO', 'VERIDIA', 'WAVE GARDEN', 'WAVE GALLERIA', 'NEW PLOTS', 
+#                                 'HARMONY GREENS', 'Golf Range', 'OLD PLOTS', 'DREAM HOMES', 'PLOTS-RES', 
+#                                 'WAVE FLOOR', 'WAVE GARDEN GH2-Ph-2', 'HSSC', 'EXECUTIVE FLOORS', 
+#                                 'WAVE FLOOR 85', 'SWAMANORATH', 'AMORE', 'WAVE FLOOR 99', 'LIVORK', 
+#                                 'TRUCIA', 'EWS', 'Mayfair Park', 'PRIME FLOORS', 'ARMONIA VILLA', 
+#                                 'VERIDIA-5', 'VERIDIA-6', 'LIG_001_(310)', 'LIG', 'VERIDIA-3', 
+#                                 'EWS_001_(410)', 'PLOTS-COMM', 'COMM BOOTH', 'VILLAS', 'PLOT-RES-IF', 
+#                                 'VERIDIA-4', 'FSI', 'DREAM BAZAAR', 'INSTITUTIONAL', 'SCO', 'VERIDIA-7', 
+#                                 'ARANYAM VALLEY', 'INSTITUTIONAL_WE', 'SCO.', 'Generic']
+#             elif analysis_type == "user_wise_funnel":
+#                 required_fields.append("OwnerId")
+#                 group_by = "OwnerId"
+#                 filtered_df = filtered_df.merge(users_df[["Id", "Name"]], left_on="OwnerId", right_on="Id", how="left")
+#                 all_categories = users_df["Name"].dropna().unique().tolist()
+#                 if all_categories:
+#                     logger.info(f"Found users: {all_categories}")
+#                 else:
+#                     logger.warning("No users found in users_df")
+#             elif analysis_type == "source_wise_funnel":
+#                 required_fields.append("LeadSource")
+#                 group_by = "LeadSource"
+#                 all_categories = filtered_df["LeadSource"].dropna().unique().tolist()
+#                 if all_categories:
+#                     logger.info(f"Found lead sources: {all_categories}")
+#                 else:
+#                     logger.warning("No lead sources found in filtered_df")
+#             else:  # conversion_funnel (global)
+#                 group_by = None
+#                 all_categories = ["Global"]
+
+#             missing_fields = [f for f in required_fields if f not in filtered_df.columns]
+#             if missing_fields:
+#                 logger.error(f"Missing fields in filtered_df: {missing_fields}")
+#                 return {"type": "error", "message": f"Missing fields: {missing_fields}"}
+
+#             logger.info(f"Filtered_df columns: {filtered_df.columns.tolist()}")
+#             logger.info(f"Filtered_df shape: {filtered_df.shape}")
+#             logger.info(f"Sample filtered_df data:\n{filtered_df.head().to_string()}")
+
+#             filtered_events = events_df.copy()
+#             for field, value in filters.items():
+#                 if field in filtered_events.columns:
+#                     if isinstance(value, str):
+#                         filtered_events = filtered_events[filtered_events[field] == value]
+#                     elif isinstance(value, dict):
+#                         if field == "CreatedDate":
+#                             if "$gte" in value:
+#                                 gte_value = pd.to_datetime(value["$gte"], utc=True)
+#                                 filtered_events = filtered_events[filtered_events[field] >= gte_value]
+#                             if "$lte" in value:
+#                                 lte_value = pd.to_datetime(value["$lte"], utc=True)
+#                                 filtered_events = filtered_events[filtered_events[field] <= lte_value]
+#             logger.info(f"Filtered_events shape: {filtered_events.shape}")
+#             logger.info(f"Sample filtered_events data:\n{filtered_events.head().to_string()}")
+
+#             # Group data if applicable
+#             if group_by:
+#                 try:
+#                     grouped_df = filtered_df.groupby(group_by).apply(lambda x: pd.Series({
+#                         "Total Leads": len(x),
+#                         "Valid Leads": len(x[x["Customer_Feedback__c"] != "Junk"]),
+#                         "SOL": len(x[x["Status"] == "Qualified"]),
+#                         "Meeting Booked": len(x[(x["Status"] == "Qualified") & (x["Is_Appointment_Booked__c"] == True)]),
+#                         "Disqualified Leads": len(x[x["Customer_Feedback__c"] == "Not Interested"]),
+#                         "Open Leads": len(x[x["Status"].isin(["New", "Nurturing"])]),
+#                         "Total Appointment": len(events_df[events_df["Appointment_Status__c"].isin(["Completed", "Scheduled", "Cancelled", "No show"])]),
+#                         "Meeting Done": len(filtered_events[filtered_events[group_by].isin(x[group_by]) & (filtered_events["Appointment_Status__c"] == "Completed")]) if group_by in filtered_events.columns else 0
+#                     })).reset_index()
+#                     logger.info(f"Grouped_df shape: {grouped_df.shape}")
+#                     logger.info(f"Sample grouped_df:\n{grouped_df.head().to_string()}")
+
+#                     # Compute ratios
+#                     grouped_df["Junk %"] = ((grouped_df["Total Leads"] - grouped_df["Valid Leads"]) / grouped_df["Total Leads"].replace({0: 1})) * 100
+#                     grouped_df["VL:SOL"] = grouped_df["Valid Leads"] / grouped_df["SOL"].replace({0: 1})
+#                     grouped_df["SOL:MB"] = grouped_df["SOL"] / grouped_df["Meeting Booked"].replace({0: 1})
+#                     grouped_df["MB:MD"] = grouped_df["Meeting Booked"] / grouped_df["Meeting Done"].replace({0: 1})
+
+#                     # Ensure all categories are included
+#                     result_df = pd.DataFrame(index=all_categories).join(grouped_df.set_index(group_by)).fillna(0).reset_index()
+#                     if analysis_type == "user_wise_funnel":
+#                         result_df.columns = ["Name"] + list(grouped_df.columns[1:])
+#                     elif analysis_type == "product_wise_funnel":
+#                         result_df.columns = ["Project_Category__c"] + list(grouped_df.columns[1:])
+#                     else:  # source_wise_funnel
+#                         result_df.columns = ["LeadSource"] + list(grouped_df.columns[1:])
+#                     logger.info(f"Result_df shape: {result_df.shape}")
+#                     logger.info(f"Sample result_df:\n{result_df.head().to_string()}")
+#                 except Exception as e:
+#                     logger.error(f"Error in grouping: {str(e)}")
+#                     return {"type": "error", "message": f"Error in grouping: {str(e)}"}
+#             else:  # conversion_funnel (global)
 #                 total_leads = len(filtered_df)
-#                 valid_leads = len(filtered_df[filtered_df["Customer_Feedback__c"] != 'Junk'])
+#                 valid_leads = len(filtered_df[filtered_df["Customer_Feedback__c"] != "Junk"])
 #                 sol_leads = len(filtered_df[filtered_df["Status"] == "Qualified"])
-#                 meeting_booked = len(filtered_df[
-#                     (filtered_df["Status"] == "Qualified") & (filtered_df["Is_Appointment_Booked__c"] == True)
-#                 ])
-#                 meeting_done = len(filtered_events[(filtered_events["Appointment_Status__c"] == "Completed")])
+#                 meeting_booked = len(filtered_df[(filtered_df["Status"] == "Qualified") & (filtered_df["Is_Appointment_Booked__c"] == True)])
+#                 meeting_done = len(filtered_events[filtered_events["Appointment_Status__c"] == "Completed"])
 #                 disqualified_leads = len(filtered_df[filtered_df["Customer_Feedback__c"] == "Not Interested"])
-#                 # Calculate percentage of disqualified leads
-#                 disqualified_percentage = (disqualified_leads / total_leads * 100) if total_leads > 0 else 0
 #                 open_leads = len(filtered_df[filtered_df["Status"].isin(["New", "Nurturing"])])
 #                 junk_percentage = ((total_leads - valid_leads) / total_leads * 100) if total_leads > 0 else 0
 #                 vl_sol_ratio = (valid_leads / sol_leads) if sol_leads > 0 else "N/A"
-#                 tl_vl_ratio = (total_leads / valid_leads) if valid_leads > 0 else "N/A"
 #                 sol_mb_ratio = (sol_leads / meeting_booked) if meeting_booked > 0 else "N/A"
 #                 meeting_booked_meeting_done = (meeting_done / meeting_booked) if meeting_done > 0 else "N/A"
-#                 funnel_metrics = {
-#                     "TL:VL Ratio": round(tl_vl_ratio, 2) if isinstance(tl_vl_ratio, (int, float)) else tl_vl_ratio,
-#                     "VL:SOL Ratio": round(vl_sol_ratio, 2) if isinstance(vl_sol_ratio, (int, float)) else vl_sol_ratio,
-#                     "SOL:MB Ratio": round(sol_mb_ratio, 2) if isinstance(sol_mb_ratio, (int, float)) else sol_mb_ratio,
-#                     "MB:MD Ratio": round(meeting_booked_meeting_done, 2) if isinstance(meeting_booked_meeting_done, (int, float)) else meeting_booked_meeting_done,
-#                 }
-#                 graph_data["Funnel Stages"] = {
-#                     "Total Leads": total_leads,
-#                     "Valid Leads": valid_leads,
-#                     "Sales Opportunity Leads (SOL)": sol_leads,
-#                     "Meeting Booked": meeting_booked,
-#                     "Meeting Done": meeting_done
-#                 }
-#                 return {
-#                     "type": "conversion_funnel",
-#                     "funnel_metrics": funnel_metrics,
-#                     "quarterly_data": {selected_quarter: {
-#                         "Total Leads": total_leads,
-#                         "Valid Leads": valid_leads,
-#                         "Sales Opportunity Leads (SOL)": sol_leads,
-#                         "Meeting Booked": meeting_booked,
-#                         "Disqualified Leads": disqualified_leads,
-#                         "Disqualified %": round(disqualified_percentage, 2),  # Add percentage
-#                         "Open Leads": open_leads,
-#                         "Junk %": round(junk_percentage, 2),
-#                         "VL:SOL Ratio": round(vl_sol_ratio, 2) if isinstance(vl_sol_ratio, (int, float)) else vl_sol_ratio,
-#                         "SOL:MB Ratio": round(sol_mb_ratio, 2) if isinstance(sol_mb_ratio, (int, float)) else sol_mb_ratio
-#                     }},
-#                     "graph_data": graph_data,
-#                     "filtered_data": filtered_df,
-#                     "is_sales_related": is_sales_related,
-#                     "selected_quarter": selected_quarter
-#                 }
-#             return {"type": "error", "message": f"Conversion funnel not supported for {object_type}"}
-#         #===============================end of code===================
+#                 sale_done = len(opportunities_df[opportunities_df["Sales_Order_Number__c"].notna() & (opportunities_df["Sales_Order_Number__c"] != "None")])
+#                 md_sd_ratio = (meeting_done / sale_done) if sale_done > 0 else "N/A"
+#                 result_df = pd.DataFrame({
+#                     "Category": ["Global"],
+#                     "Total Leads": [total_leads],
+#                     "Valid Leads": [valid_leads],
+#                     "SOL": [sol_leads],
+#                     "Meeting Booked": [meeting_booked],
+#                     "Meeting Done": [meeting_done],
+#                     "Disqualified Leads": [disqualified_leads],
+#                     "Open Leads": [open_leads],
+#                     "Junk %": [junk_percentage],
+#                     "VL:SOL": [vl_sol_ratio],
+#                     "SOL:MB": [sol_mb_ratio],
+#                     "MB:MD": [meeting_booked_meeting_done],
+#                     "MD:SD": [md_sd_ratio]
+#                 })
+#                 logger.info(f"Global result_df:\n{result_df.to_string()}")
+
+#             # Prepare graph data
+#             if not result_df.empty:
+#                 graph_data["Funnel Stages"] = result_df.set_index(result_df.columns[0])[["Total Leads", "Valid Leads", "SOL", "Meeting Booked", "Meeting Done"]].to_dict()
+#                 quarterly_data = {selected_quarter if selected_quarter else "All": {
+#                     "Total Leads": result_df["Total Leads"].iloc[0] if not result_df.empty else 0,
+#                     "Valid Leads": result_df["Valid Leads"].iloc[0] if not result_df.empty else 0,
+#                     "Sales Opportunity Leads (SOL)": result_df["SOL"].iloc[0] if not result_df.empty else 0,
+#                     "Meeting Booked": result_df["Meeting Booked"].iloc[0] if not result_df.empty else 0,
+#                     "Disqualified Leads": result_df["Disqualified Leads"].iloc[0] if not result_df.empty else 0,
+#                     "Disqualified %": result_df["Disqualified Leads"].iloc[0] / result_df["Total Leads"].iloc[0] * 100 if result_df["Total Leads"].iloc[0] > 0 else 0,
+#                     "Open Leads": result_df["Open Leads"].iloc[0] if not result_df.empty else 0,
+#                     "Junk %": result_df["Junk %"].iloc[0] if not result_df.empty else 0,
+#                     "VL:SOL Ratio": result_df["VL:SOL"].iloc[0] if not result_df.empty else "N/A",
+#                     "SOL:MB Ratio": result_df["SOL:MB"].iloc[0] if not result_df.empty else "N/A",
+#                     "MD:SD Ratio": result_df["MD:SD"].iloc[0] if not result_df.empty else "N/A"
+#                 }}
+#             else:
+#                 logger.warning("Result_df is empty, setting default graph data")
+#                 graph_data["Funnel Stages"] = {"Total Leads": 0, "Valid Leads": 0, "SOL": 0, "Meeting Booked": 0, "Meeting Done": 0}
+#                 quarterly_data = {selected_quarter if selected_quarter else "All": {
+#                     "Total Leads": 0, "Valid Leads": 0, "Sales Opportunity Leads (SOL)": 0, "Meeting Booked": 0,
+#                     "Disqualified Leads": 0, "Disqualified %": 0, "Open Leads": 0, "Junk %": 0,
+#                     "VL:SOL Ratio": "N/A", "SOL:MB Ratio": "N/A", "MD:SD Ratio": "N/A"
+#                 }}
+
+#             return {
+#                 "type": analysis_type,
+#                 "funnel_data": result_df,
+#                 "funnel_metrics": {col: result_df[col].iloc[0] if not result_df.empty else 0 for col in result_df.columns if col not in [result_df.columns[0]]},
+#                 "quarterly_data": quarterly_data,
+#                 "graph_data": graph_data,
+#                 "filtered_data": filtered_df,
+#                 "is_user_related": is_user_related,
+#                 "is_product_related": is_product_related,
+#                 "is_source_related": is_source_related,
+#                 "is_project_related": is_project_related,
+#                 "selected_quarter": selected_quarter
+#             }
+        
+#         #=================================end of code==========================
 #         elif analysis_type == "Total_Appointment":
 #             if object_type == "event":
 #                 required_fields = ["Appointment_Status__c"]
 #                 missing_fields = [f for f in required_fields if f not in filtered_df.columns]
 #                 if missing_fields:
 #                     logger.error(f"Missing fields for conversion_funnel: {missing_fields}")
-#                     return {"type": "error", "message": f"Missing fields: {missing_fields}"}            
-                
-    
+#                     return {"type": "error", "message": f"Missing fields: {missing_fields}"}
+
 #                 # Calculate Appointment Status Counts
 #                 if 'Appointment_Status__c' in filtered_events.columns:
 #                     appointment_status_counts = filtered_events['Appointment_Status__c'].value_counts().to_dict()
@@ -602,10 +994,9 @@
 #                 else:
 #                     appointment_status_counts = {}
 #                     logger.warning("Status column not found in filtered_events")
-                    
+
 #             return {"type": "error", "message": f" Total Appointments for {object_type}"}
-#         #====================================end new code ======================
-        
+
 #         elif analysis_type == "percentage":
 #             if object_type in ["lead", "event", "opportunity", "task"]:
 #                 total_records = len(df)
@@ -662,7 +1053,7 @@
 #         if not data:
 #             logger.warning(f"Empty graph data for field: {field}")
 #             continue
-        
+
 #         # Special handling for opportunity_vs_lead
 #         if field == "Opportunity vs Lead":
 #             try:
@@ -689,6 +1080,7 @@
 #             except Exception as e:
 #                 logger.error(f"Error rendering Opportunity vs Lead graph: {e}")
 #                 st.error(f"Failed to render Opportunity vs Lead graph: {str(e)}")
+                
 #         elif field == "Funnel Stages":  # Special handling for conversion funnel
 #             # Filter funnel stages to match the fields in quarterly_data (used in the table)
 #             if quarterly_data is None:
@@ -746,7 +1138,6 @@
 #     object_type = analysis_plan.get("object_type", "lead") if analysis_plan else "lead"
 #     is_product_related = result.get("is_product_related", False)
 #     is_sales_related = result.get("is_sales_related", False)
-#     is_disqualification_reason = result.get("is_disqualification_reason", False)
 #     selected_quarter = result.get("selected_quarter", None)
 #     graph_data = result.get("graph_data", {})
 #     filtered_data = result.get("filtered_data", pd.DataFrame())
@@ -772,13 +1163,13 @@
 #                     prioritized_cols.append(field)
 #         display_cols.extend(prioritized_cols)
 #         preferred_cols = (
-#             ['Id', 'Name', 'Phone__c', 'LeadSource', 'Status', 'CreatedDate', 'Lead_Converted__c']
+#             ['Id', 'Name', 'Phone__c', 'LeadSource', 'Status', 'CreatedDate', 'Customer_Feedback__c']
 #             if object_type == "lead"
 #             else ['Service_Request_Number__c', 'Type', 'Subject', 'CreatedDate']
 #             if object_type == "case"
 #             else ['Id', 'Subject', 'StartDateTime', 'EndDateTime', 'Appointment_Status__c', 'CreatedDate']
 #             if object_type == "event"
-#             else ['Id', 'Name', 'StageName', 'Amount', 'CloseDate', 'CreatedDate']
+#             else ['Id', 'Name', 'StageName', 'Amount', 'CloseDate', 'CreatedDate', 'Project_Category__c', 'Sales_Order_Number__c']
 #             if object_type == "opportunity"
 #             else ['Id', 'Subject', 'Transfer_Status__c', 'Customer_Feedback__c', 'Sales_Team_Feedback__c', 'Status', 'Follow_Up_Status__c']
 #             if object_type == "task"
@@ -804,14 +1195,13 @@
 #         normalized_quarter = selected_quarter
 
 #     logger.info(f"Graph data: {graph_data}")
-    
+
 #     # Handle opportunity_vs_lead result type
 #     if result_type == "opportunity_vs_lead":
 #         logger.info("Rendering opportunity vs lead summary")
 #         st.subheader(f"Opportunity vs Lead Summary{title_suffix}")
 #         df = pd.DataFrame(result["data"])
 #         st.dataframe(df.rename(columns=FIELD_DISPLAY_NAMES), use_container_width=True, hide_index=True)
-#         #st.info(f"Found {len(filtered_data)} leads matching the criteria.")
 #     # Existing result types
 #     elif result_type == "metric":
 #         logger.info("Rendering metric result")
@@ -837,8 +1227,6 @@
 #         st.subheader(f"Lead Conversion Funnel Analysis{title_suffix}")
 #         st.info(f"Found {len(filtered_data)} leads matching the criteria.")
 
-
-#         #======================new code==================
 #         # Display Appointment Status Counts as a table
 #         if appointment_status_counts:
 #             st.subheader("Appointment Status Counts")
@@ -848,7 +1236,6 @@
 #             st.dataframe(status_df, use_container_width=True, hide_index=True)
 #         else:
 #             st.warning("No appointment status data available.")
-#         #======================end of code=========================
 #         # Display the funnel metrics table (ratios)
 #         if funnel_metrics:
 #             st.subheader("Funnel Metrics")
@@ -914,16 +1301,16 @@
 #                 return
 
 #         quarter_df = pd.DataFrame.from_dict(dist, orient='index', columns=['Count']).reset_index()
-#         if object_type == "lead" and field == "Lead_Converted__c":
+#         if object_type == "lead" and field == "Customer_Feedback__c":
 #             quarter_df['index'] = quarter_df['index'].map({
-#                 'True': 'Converted (Sale)',
-#                 'False': 'Not Converted (No Sale)'
+#                 'Interested': 'Interested',
+#                 'Not Interested': 'Not Interested'
 #             })
 #         quarter_df.columns = [f"{field_display}", "Count"]
 #         quarter_df = quarter_df.sort_values(by="Count", ascending=False)
 #         st.dataframe(quarter_df, use_container_width=True, hide_index=True)
 
-#     elif result_type == "source_wise_funnel":
+#     elif result_type == "source_wise_lead":
 #         logger.info("Rendering source-wise funnel")
 #         funnel_data = result.get("funnel_data", pd.DataFrame())
 #         st.subheader(f"{object_type.capitalize()} Results{title_suffix}")
@@ -967,80 +1354,13 @@
 #                 display_data, display_cols = prepare_filtered_display_data(filtered_data, analysis_plan)
 #                 st.dataframe(display_data, use_container_width=True, hide_index=True)
 
-#         if is_product_related and object_type == "lead":
-#             if is_sales_related:
-#                 st.write("Product-wise Sales")
-#                 product_sales_data = pd.DataFrame(data.get("Project_Category__c_Lead_Converted__c", []))
-#                 if not product_sales_data.empty:
-#                     product_sales_data = product_sales_data[product_sales_data["Lead_Converted__c"] == True]
-#                     if not product_sales_data.empty:
-#                         product_sales_data = product_sales_data.drop(columns=["Lead_Converted__c"])
-#                         product_sales_data = product_sales_data.sort_values(by="Count", ascending=False)
-#                         st.dataframe(product_sales_data.rename(columns=FIELD_DISPLAY_NAMES), use_container_width=True, hide_index=True)
-#                     else:
-#                         st.warning("No lead data found for the selected criteria.")
-#                 else:
-#                     st.warning("No product lead data.")
-#             else:
-#                 st.write("Product-wise Distribution")
-#                 product_funnel_data = pd.DataFrame(data.get("Project_Category__c_Status", []))
-#                 if not product_funnel_data.empty:
-#                     product_funnel_data = product_funnel_data.sort_values(by="Count", ascending=False)
-#                     st.dataframe(product_funnel_data.rename(columns=FIELD_DISPLAY_NAMES), use_container_width=True, hide_index=True)
-#                 else:
-#                     st.warning("No product data.")
-#         elif is_disqualification_reason and object_type == "lead":
-#             st.write("Disqualification Reasons Distribution")
-#             dist_data = data.get("Disqualification_Reason__c", {})
-#             if dist_data:
-#                 dist_df = pd.DataFrame.from_dict(dist_data["counts"], orient='index', columns=['Count']).reset_index()
-#                 dist_df.columns = ["Disqualification_Reason__c", "Count"]
-#                 dist_df = dist_df.sort_values(by="Count", ascending=False)
-#                 st.dataframe(dist_df.rename(columns=FIELD_DISPLAY_NAMES), use_container_width=True, hide_index=True)
-#             else:
-#                 st.warning("No disqualification reason data available.")
-#         else:
-#             is_geography_related = "geography" in user_question.lower() or "city" in user_question.lower()
-#             group_fields = result.get("fields", []) + [f for f in analysis_plan.get("filters", {}).keys() if f in filtered_data.columns]
-#             if group_fields and not is_geography_related:
-#                 st.write(f"Distribution of {', '.join([FIELD_DISPLAY_NAMES.get(f, f) for f in group_fields])}")
-#                 dist_df = filtered_data[group_fields].groupby(group_fields).size().reset_index(name="Count")
-#                 dist_df = dist_df.sort_values(by="Count", ascending=False)
-#                 st.dataframe(dist_df.rename(columns=FIELD_DISPLAY_NAMES), use_container_width=True, hide_index=True)
-#             else:
-#                 if is_geography_related:
-#                     field = "City__c"
-#                     if field not in filtered_data.columns:
-#                         st.warning(f"No {FIELD_DISPLAY_NAMES.get(field, field)} data available in the filtered dataset.")
-#                         return
-#                     def clean_city_name(city):
-#                         if pd.isna(city) or not city or city == '':
-#                             return "Unknown"
-#                         city = str(city).strip().lower()
-#                         suffixes = [" city", " ncr", " metro", " urban", " rural"]
-#                         for suffix in suffixes:
-#                             city = city.replace(suffix, "")
-#                         return city.strip()
-#                     filtered_data['Cleaned_City__c'] = filtered_data[field].apply(clean_city_name)
-#                     dist = filtered_data['Cleaned_City__c'].value_counts().to_dict()
-#                     if not dist:
-#                         st.warning(f"No valid city data available for {FIELD_DISPLAY_NAMES.get(field, field)} after cleaning.")
-#                         return
-#                     st.write(f"Distribution of {FIELD_DISPLAY_NAMES.get(field, field)}")
-#                     dist_df = pd.DataFrame.from_dict(dist, orient='index', columns=['Count']).reset_index()
-#                     dist_df.columns = ["City", "Count"]
-#                     dist_df["City"] = dist_df["City"].str.title()
-#                     dist_df = dist_df.sort_values(by="Count", ascending=False)
-#                     st.dataframe(dist_df, use_container_width=True, height=len(dist_df) * 35 + 50, hide_index=True)
-#                 else:
-#                     for field, dist in data.items():
-#                         if field in ["State__c", "Country__c"]:
-#                             continue
-#                         st.write(f"Distribution of {FIELD_DISPLAY_NAMES.get(field, field)}")
-#                         dist_df = pd.DataFrame.from_dict(dist["counts"], orient='index', columns=['Count']).reset_index()
-#                         dist_df.columns = [f"{FIELD_DISPLAY_NAMES.get(field, field)}", "Count"]
-#                         dist_df = dist_df.sort_values(by="Count", ascending=False)
-#                         st.dataframe(dist_df, use_container_width=True, hide_index=True)
+#         for field, dist in data.items():
+#             st.write(f"Distribution of {FIELD_DISPLAY_NAMES.get(field, field)}")
+#             dist_df = pd.DataFrame.from_dict(dist["counts"], orient='index', columns=['Count']).reset_index()
+#             dist_df.columns = [f"{FIELD_DISPLAY_NAMES.get(field, field)}", "Count"]
+#             dist_df["Percentage"] = pd.DataFrame.from_dict(dist["percentages"], orient='index').values
+#             dist_df = dist_df.sort_values(by="Count", ascending=False)
+#             st.dataframe(dist_df, use_container_width=True, hide_index=True)
 
 #     elif result_type == "percentage":
 #         logger.info("Rendering percentage result")
@@ -1056,6 +1376,41 @@
 #         logger.error("Rendering error message")
 #         st.error(result.get("message", "An error occurred"))
 #         return
+    
+#     elif result_type == "user_meeting_summary":
+#         logger.info("Rendering user-wise meeting summary")
+#         st.subheader(f"User-Wise Meeting Done Summary{title_suffix}")
+#         df = pd.DataFrame(result["data"])
+#         if not df.empty:
+#             st.dataframe(df.rename(columns={"Name": "User", "Department": "Department", "Meeting_Done_Count": "Completed Meetings"}), use_container_width=True, hide_index=True)
+#             total_meetings = result.get("total", 0)  # Safely get total, default to 0 if not present
+#             st.info(f"Total completed meetings: {total_meetings}")
+#         else:
+#             st.warning("No completed meeting data found for the selected criteria.")
+            
+#     elif result_type == "dept_user_meeting_summary":
+#         logger.info("Rendering department-wise user meeting summary")
+#         st.subheader(f"Department-Wise User Meeting Done Summary{title_suffix}")
+#         df = pd.DataFrame(result["data"])
+#         if not df.empty:
+#         # Use the columns from the result to dynamically rename
+#             column_mapping = {col: col_display_name.get(col, col) for col in result["columns"]}
+#             st.dataframe(df.rename(columns=column_mapping), use_container_width=True, hide_index=True)
+#             total_meetings = result.get("total", 0)  # Safely get total, default to 0 if not present
+#             st.info(f"Total completed meetings: {total_meetings}")
+#         else:
+#             st.warning("No completed meeting data found for the selected criteria.")
+            
+#     elif result_type == "user_sales_summary":
+#         logger.info("Rendering user-wise sales summary")
+#         st.subheader(f"User-Wise Sales Order Summary{title_suffix}")
+#         df = pd.DataFrame(result["data"])
+#         if not df.empty:
+#             st.dataframe(df.rename(columns={"Name": "User", "Sales_Order_Count": "Sales Orders"}), use_container_width=True, hide_index=True)
+#             total_sales = result.get("total", 0)
+#             st.info(f"Total sales orders: {total_sales}")
+#         else:
+#             st.warning("No sales order data found for the selected criteria.")
 
 #     # Show Graph button for all applicable result types
 #     if result_type not in ["info", "error"]:
@@ -1066,7 +1421,7 @@
 #             relevant_graph_fields = [f for f in display_cols if f in graph_data]
 #             if result_type == "quarterly_distribution":
 #                 render_graph(graph_data.get(normalized_quarter, {}), relevant_graph_fields, title_suffix)
-                
+
 #             # For opportunity_vs_lead, explicitly include "Opportunity vs Lead"
 #             elif result_type == "opportunity_vs_lead":
 #                 relevant_graph_fields = ["Opportunity vs Lead"]
@@ -1075,11 +1430,22 @@
 #                 # For conversion funnel, we pass quarterly_data to align funnel stages with the table
 #                 quarterly_data_for_graph = result.get("quarterly_data", {}).get(selected_quarter, {})
 #                 render_graph(graph_data, ["Funnel Stages"], title_suffix, quarterly_data=quarterly_data_for_graph)
+#             elif result_type == "user_sales_summary":
+#                 relevant_graph_fields = ["User_Sales"]
+#                 render_graph(graph_data, relevant_graph_fields, title_suffix)
+                
+#             elif result_type == "dept_user_meeting_summary":
+#                 relevant_graph_fields = ["Dept_Meeting_Done"]
+#                 render_graph(graph_data, relevant_graph_fields, title_suffix)
+            
+#             elif result_type == "user_meeting_summary":
+#                 relevant_graph_fields = ["User_Meeting_Done"]
+#                 render_graph(graph_data, relevant_graph_fields, title_suffix)
 #             else:
 #                 render_graph(graph_data, relevant_graph_fields, title_suffix)
 
 #         # Add Export to CSV option for applicable result types
-#         if result_type in ["table", "distribution", "quarterly_distribution", "source_wise_funnel", "conversion_funnel"]:
+#         if result_type in ["table", "distribution", "quarterly_distribution", "source_wise_lead", "conversion_funnel"]:
 #             if not filtered_data.empty:
 #                 export_key = f"export_data_{result_type}_{selected_quarter}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
 #                 if st.button("Export Data to CSV", key=export_key):
@@ -1097,7 +1463,7 @@
 #         st.cache_data.clear()
 #         st.cache_resource.clear()
 #         st.success("Cache cleared successfully!")
-#     user_question = st.text_input("Enter your query:", "lead conversion funnel in Q4")
+#     user_question = st.text_input("Enter your query:", "product-wise sale")
 #     if st.button("Analyze"):
 #         # Sample data for testing
 #         sample_data = {
@@ -1113,11 +1479,11 @@
 #                 "DREAM HOMES",
 #                 "ARANYAM VALLEY"
 #             ],
-#             "Lead_Converted__c": [
-#                 True,
-#                 False,
-#                 True,
-#                 False
+#             "Customer_Feedback__c": [
+#                 "Interested",
+#                 "Not Interested",
+#                 "Interested",
+#                 "Not Interested"
 #             ],
 #             "Disqualification_Reason__c": [
 #                 "Budget Issue",
@@ -1130,13 +1496,6 @@
 #                 "Unqualified",
 #                 "Qualified",
 #                 "New"
-#             ],
-#             "Customer_Feedback__c": [
-#                 "Interested",
-#                 "Junk",
-#                 "Interested",
-#                 "Not Interested",
-#                 "disqualification "
 #             ],
 #             "Is_Appointment_Booked__c": [
 #                 True,
@@ -1156,26 +1515,30 @@
 #         cases_df = pd.DataFrame()
 #         events_df = pd.DataFrame({ "Status": ["Completed"],  # Added sample task data to test Meeting Done
 #             "CreatedDate": ["2025-02-15T10:00:00Z", "2025-02-15T11:00:00Z"]})
-#         opportunities_df = pd.DataFrame()
+#         opportunities_df = pd.DataFrame({
+#             "Sales_Order_Number__c": [123, None, 456, 789],
+#             "Project_Category__c": ["VERIDIA", "ELIGO", "EDEN", "WAVE GARDEN"],
+#             "CreatedDate": ["2025-02-15T10:00:00Z", "2025-02-15T11:00:00Z", "2025-02-15T12:00:00Z", "2025-02-15T13:00:00Z"]
+#         })
 #         task_df = pd.DataFrame({
 #             "Status": ["Completed", "Open"],  # Added sample task data to test Meeting Done
 #             "CreatedDate": ["2025-02-15T10:00:00Z", "2025-02-15T11:00:00Z"]
 #         })
 
-#         # Analysis plan for conversion funnel
+#         # Analysis plan for product-wise sale
 #         analysis_plan = {
-#             "analysis_type": "conversion_funnel",
-#             "object_type": "lead",
-#             "fields": [],
-#             "quarter": "Q4 2024-25",
+#             "analysis_type": "distribution",
+#             "object_type": "opportunity",
+#             "fields": ["Project_Category__c"],
+#             "quarter": "Q1 - Q4",
 #             "filters": {}
 #         }
 #         result = execute_analysis(analysis_plan, leads_df, users_df, cases_df, events_df, opportunities_df, task_df, user_question)
 #         display_analysis_result(result, analysis_plan, user_question)
+        
+        
+#=======================================new code wed day 3/7/25 update====================
 
-#====================================new code==============================
-
-#=================================new code for the product sales=====================
 
 import streamlit as st
 import pandas as pd
@@ -1187,10 +1550,10 @@ from config import logger, FIELD_TYPES, FIELD_DISPLAY_NAMES
 from pytz import timezone
 
 col_display_name = {
-        "Name": "User",
-        "Department": "Department",
-        "Meeting_Done_Count": "Completed Meetings"
-        }
+    "Name": "User",
+    "Department": "Department",
+    "Meeting_Done_Count": "Completed Meetings"
+}
 
 def execute_analysis(analysis_plan, leads_df, users_df, cases_df, events_df, opportunities_df, task_df, user_question=""):
     """
@@ -1232,6 +1595,17 @@ def execute_analysis(analysis_plan, leads_df, users_df, cases_df, events_df, opp
             logger.error(f"No {object_type} data available")
             return {"type": "error", "message": f"No {object_type} data available"}
 
+        # Detect specific query types
+        source_keywords = ["source-wise", "lead source"]
+        project_keywords = ["project-wise", "project"]
+        user_keywords = ["user-wise", "user based", "employee-wise"]
+        product_funnel_keywords = ["product wise funnel", "product-wise funnel"]
+        
+        is_source_related = any(keyword in user_question.lower() for keyword in source_keywords)
+        is_project_related = any(keyword in user_question.lower() for keyword in project_keywords)
+        is_user_related = any(keyword in user_question.lower() for keyword in user_keywords)
+        is_product_funnel = any(keyword in user_question.lower() for keyword in product_funnel_keywords)
+
         # Validate fields for opportunity_vs_lead analysis
         if analysis_type in ["opportunity_vs_lead", "opportunity_vs_lead_percentage"]:
             required_fields = ["Customer_Feedback__c", "Id"] 
@@ -1240,7 +1614,7 @@ def execute_analysis(analysis_plan, leads_df, users_df, cases_df, events_df, opp
                 logger.error(f"Missing fields for {analysis_type}: {missing_fields}")
                 return {"type": "error", "message": f"Missing fields: {missing_fields}"}
 
-        if analysis_type in ["distribution", "top", "percentage", "quarterly_distribution", "source_wise_funnel", "conversion_funnel"] and not fields:
+        if analysis_type in ["distribution", "top", "percentage", "quarterly_distribution", "source_wise_lead", "product_wise_lead", "conversion_funnel", "product_wise_funnel"] and not fields:
             fields = list(filters.keys()) if filters else []
             if not fields:
                 logger.error(f"No fields specified for {analysis_type} analysis")
@@ -1265,19 +1639,27 @@ def execute_analysis(analysis_plan, leads_df, users_df, cases_df, events_df, opp
                 fields.append("Project_Category__c")
             if "Status" not in fields:
                 fields.append("Status")
-            if analysis_type not in ["source_wise_funnel", "distribution", "quarterly_distribution"]:
+            if analysis_type not in ["source_wise_lead", "product_wise_lead", "distribution", "quarterly_distribution", "product_wise_funnel"]:
                 analysis_type = "distribution"
                 analysis_plan["analysis_type"] = "distribution"
             analysis_plan["fields"] = fields
 
-        if is_sales_related and object_type == "lead":
-            logger.info(f"Detected sales-related question: '{user_question}'. Including Customer_Feedback__c.")
-            if "Customer_Feedback__c" not in df.columns:
-                logger.error("Customer_Feedback__c column not found")
-                return {"type": "error", "message": "Customer_Feedback__c column not found"}
-            if "Customer_Feedback__c" not in fields:
-                fields.append("Customer_Feedback__c")
-            analysis_plan["fields"] = fields
+        if is_sales_related and object_type == "opportunity":
+            logger.info(f"Detected sales-related question: '{user_question}'. Filtering Sales_Order_Number__c first.")
+            if "Sales_Order_Number__c" not in df.columns:
+                logger.error("Sales_Order_Number__c column not found")
+                return {"type": "error", "message": "Sales_Order_Number__c column not found"}
+            # First filter to exclude None values in Sales_Order_Number__c
+            df = df[df["Sales_Order_Number__c"].notna() & (df["Sales_Order_Number__c"] != "None")]
+            logger.info(f"Opportunities after filtering None Sales_Order_Number__c: {len(df)}")
+            # Then apply additional product/project filters if specified
+            if "Project_Category__c" in fields or any(f in filters for f in ["Project_Category__c", "Project"]):
+                if "Project_Category__c" not in fields:
+                    fields.append("Project_Category__c")
+                analysis_plan["fields"] = fields
+            if analysis_type not in ["distribution", "quarterly_distribution", "product_wise_funnel"]:
+                analysis_type = "distribution"
+                analysis_plan["analysis_type"] = "distribution"
 
         # Copy the dataframe to avoid modifying the original
         filtered_df = df.copy()
@@ -1450,7 +1832,6 @@ def execute_analysis(analysis_plan, leads_df, users_df, cases_df, events_df, opp
                     "selected_quarter": selected_quarter
                 }
         
-        #===============================new code for the user===================
         # New user_sales_summary analysis type
         elif analysis_type == "user_sales_summary" and object_type == "opportunity":
             required_fields_opp = ["OwnerId", "Sales_Order_Number__c"]
@@ -1499,7 +1880,6 @@ def execute_analysis(analysis_plan, leads_df, users_df, cases_df, events_df, opp
                 "selected_quarter": selected_quarter
             }
             
-        #======================================new code ===================
         if selected_quarter:
             start_date = quarters[selected_quarter]["start"]
             end_date = quarters[selected_quarter]["end"]
@@ -1586,7 +1966,6 @@ def execute_analysis(analysis_plan, leads_df, users_df, cases_df, events_df, opp
                         "filtered_data": merged_df,
                         "selected_quarter": selected_quarter
                     }
-        #============================end of code for the user=====================
         
         # Handle opportunity_vs_lead_percentage analysis
         elif analysis_type == "opportunity_vs_lead_percentage":
@@ -1609,7 +1988,6 @@ def execute_analysis(analysis_plan, leads_df, users_df, cases_df, events_df, opp
             return {"type": "error", "message": f"Opportunity vs Lead percentage analysis not supported for {object_type}"}
 
         elif analysis_type == "count":
-            #filtered_df = df[df["Appointment_Status__c"].str.lower() == "completed"].copy()
             return {
                 "type": "metric",
                 "value": len(filtered_df),
@@ -1796,7 +2174,7 @@ def execute_analysis(analysis_plan, leads_df, users_df, cases_df, events_df, opp
                 }
             return {"type": "error", "message": f"Quarterly distribution requires {object_type} data with CreatedDate"}
 
-        elif analysis_type == "source_wise_funnel":
+        elif analysis_type == "source_wise_lead":
             if object_type == "lead":
                 required_fields = ["LeadSource"]
                 missing_fields = [f for f in required_fields if f not in filtered_df.columns]
@@ -1805,7 +2183,7 @@ def execute_analysis(analysis_plan, leads_df, users_df, cases_df, events_df, opp
                 funnel_data = filtered_df.groupby(required_fields).size().reset_index(name="Count")
                 graph_data["LeadSource"] = funnel_data.set_index("LeadSource")["Count"].to_dict()
                 return {
-                    "type": "source_wise_funnel",
+                    "type": "source_wise_lead",
                     "fields": fields,
                     "funnel_data": funnel_data,
                     "graph_data": graph_data,
@@ -1815,12 +2193,436 @@ def execute_analysis(analysis_plan, leads_df, users_df, cases_df, events_df, opp
                 }
             return {"type": "error", "message": f"Source-wise funnel not supported for {object_type}"}
 
+        #=======================product wise funnel=============================
+        elif analysis_type == "product_wise_funnel":
+            if object_type == "lead":
+                required_fields = ["Customer_Feedback__c", "Status", "Is_Appointment_Booked__c", "Project_Category__c"]
+                missing_fields = [f for f in required_fields if f not in filtered_df.columns]
+                if missing_fields:
+                    return {"type": "error", "message": f"Missing fields: {missing_fields}"}
+
+               
+                
+                filtered_events = events_df.merge(
+                    filtered_df[["OwnerId", "Project_Category__c"]],
+                    left_on="CreatedById",
+                    right_on="OwnerId",
+                    how="left"
+                ).dropna(subset=["Project_Category__c"])
+
+
+                for field, value in filters.items():
+                    if field in filtered_events.columns:
+                        if isinstance(value, str):
+                            filtered_events = filtered_events[filtered_events[field] == value]
+                        elif isinstance(value, dict):
+                            if field == "CreatedDate":
+                                if "$gte" in value:
+                                    gte_value = pd.to_datetime(value["$gte"], utc=True)
+                                    filtered_events = filtered_events[filtered_events[field] >= gte_value]
+                                if "$lte" in value:
+                                    lte_value = pd.to_datetime(value["$lte"], utc=True)
+                                    filtered_events = filtered_events[filtered_events[field] <= lte_value]
+
+                # Group by Project_Category__c
+                grouped_df = filtered_df.groupby("Project_Category__c")
+                product_funnel_data = {}
+                product_graph_data = {}
+
+                for product, group in grouped_df:
+                    total_leads = len(group)
+                    valid_leads = len(group[group["Customer_Feedback__c"] != 'Junk'])
+                    sol_leads = len(group[group["Status"] == "Qualified"])
+                    meeting_booked = len(group[
+                        (group["Status"] == "Qualified") & (group["Is_Appointment_Booked__c"] == True)
+                    ])
+                    # Filter meetings for this specific product
+                    product_meetings = filtered_events[filtered_events["Project_Category__c"] == product]
+                    meeting_done = len(product_meetings[product_meetings["Appointment_Status__c"] == "Completed"])
+                    disqualified_leads = len(group[group["Customer_Feedback__c"] == "Not Interested"])
+                    open_leads = len(group[group["Status"].isin(["New", "Nurturing"])])
+                    junk_percentage = ((total_leads - valid_leads) / total_leads * 100) if total_leads > 0 else 0
+                    tl_vl_ratio = (valid_leads / total_leads * 100) if total_leads > 0 else 0
+                    vl_sol_ratio = (valid_leads / sol_leads * 100 if sol_leads > 0 else 0) if valid_leads > 0 else 0
+                    sol_mb_ratio = (meeting_booked / sol_leads * 100 if sol_leads > 0 else 0) if meeting_booked > 0 else 0
+                    md_sd_ratio = 0  # Initialize
+
+                    sale_done = len(opportunities_df[
+                        (opportunities_df["Sales_Order_Number__c"].notna()) & 
+                        (opportunities_df["Sales_Order_Number__c"] != "None") & 
+                        (opportunities_df["Project_Category__c"] == product)
+                    ])
+                    md_sd_ratio = (meeting_done / sale_done * 100 if sale_done > 0 else 0) if meeting_done > 0 else 0
+
+                    product_funnel_data[product] = {
+                        "Total Leads": total_leads,
+                        "Valid Leads": valid_leads,
+                        "Sales Opportunity Leads (SOL)": sol_leads,
+                        "Meeting Booked": meeting_booked,
+                        "Meeting Done": meeting_done,
+                        "Sale Done": sale_done,
+                        "Disqualified Leads": disqualified_leads,
+                        "Disqualified %": round((disqualified_leads / total_leads * 100), 2) if total_leads > 0 else 0,
+                        "Open Leads": open_leads,
+                        "Junk %": round(junk_percentage, 2),
+                        "TL:VL Ratio (%)": round(tl_vl_ratio, 2) if tl_vl_ratio != "N/A" else 0,
+                        "VL:SOL Ratio (%)": round(vl_sol_ratio, 2) if vl_sol_ratio != "N/A" else 0,
+                        "SOL:MB Ratio (%)": round(sol_mb_ratio, 2) if sol_mb_ratio != "N/A" else 0,
+                        "MD:SD Ratio (%)": round(md_sd_ratio, 2) if md_sd_ratio != "N/A" else 0
+                    }
+                    product_graph_data[product] = {
+                        "Total Leads": total_leads,
+                        "Valid Leads": valid_leads,
+                        "Sales Opportunity Leads (SOL)": sol_leads,
+                        "Meeting Booked": meeting_booked,
+                        "Meeting Done": meeting_done,
+                        "Sale Done": sale_done
+                    }
+
+                return {
+                    "type": "product_wise_funnel",
+                    "funnel_data": product_funnel_data,
+                    "graph_data": {"Product Funnel Stages": product_graph_data},
+                    "filtered_data": filtered_df,
+                    "is_user_related": is_user_related,
+                    "is_product_related": is_product_related,
+                    "is_source_related": is_source_related,
+                    "is_project_related": is_project_related,
+                    "is_product_funnel": is_product_funnel,
+                    "selected_quarter": selected_quarter
+                }
+            return {"type": "error", "message": f"Product-wise funnel not supported for {object_type}"}
+        
+        
+        
+        #=====================================new code for the project wise funnel==================
+        # Assuming this code is part of a larger function where filtered_df, events_df, opportunities_df, and other variables are defined
+        # elif analysis_type == "project_wise_funnel":
+        #     if object_type == "lead":
+        #         required_fields = ["Customer_Feedback__c", "Status", "Is_Appointment_Booked__c", "Project__c"]
+        #         missing_fields = [f for f in required_fields if f not in filtered_df.columns]
+        #         if missing_fields:
+        #             return {"type": "error", "message": f"Missing fields: {missing_fields}"}
+
+        #         filtered_events = events_df.merge(
+        #             filtered_df[["OwnerId", "Project__c"]],
+        #             left_on="CreatedById",
+        #             right_on="OwnerId",
+        #             how="left"
+        #         ).dropna(subset=["Project__c"])
+
+        #         for field, value in filters.items():
+        #             if field in filtered_events.columns:
+        #                 if isinstance(value, str):
+        #                     filtered_events = filtered_events[filtered_events[field] == value]
+        #                 elif isinstance(value, dict):
+        #                     if field == "CreatedDate":
+        #                         if "$gte" in value:
+        #                             gte_value = pd.to_datetime(value["$gte"], utc=True)
+        #                             filtered_events = filtered_events[filtered_events[field] >= gte_value]
+        #                         if "$lte" in value:
+        #                             lte_value = pd.to_datetime(value["$lte"], utc=True)
+        #                             filtered_events = filtered_events[filtered_events[field] <= lte_value]
+
+        #         # Group by Project__c
+        #         grouped_df = filtered_df.groupby("Project__c")
+        #         project_funnel_data = {}
+        #         project_graph_data = {}
+
+        #         for project, group in grouped_df:
+        #             total_leads = len(group)
+        #             valid_leads = len(group[group["Customer_Feedback__c"] != 'Junk'])
+        #             sol_leads = len(group[group["Status"] == "Qualified"])
+        #             meeting_booked = len(group[
+        #                 (group["Status"] == "Qualified") & (group["Is_Appointment_Booked__c"] == True)
+        #             ])
+        #             # Filter meetings for this specific project
+        #             project_meetings = filtered_events[filtered_events["Project__c"] == project]
+        #             meeting_done = len(project_meetings[project_meetings["Appointment_Status__c"] == "Completed"])
+        #             disqualified_leads = len(group[group["Customer_Feedback__c"] == "Not Interested"])
+        #             open_leads = len(group[group["Status"].isin(["New", "Nurturing"])])
+        #             junk_percentage = ((total_leads - valid_leads) / total_leads * 100) if total_leads > 0 else 0
+        #             tl_vl_ratio = (valid_leads / total_leads * 100) if total_leads > 0 else 0
+        #             vl_sol_ratio = (valid_leads / sol_leads * 100 if sol_leads > 0 else 0) if valid_leads > 0 else 0
+        #             sol_mb_ratio = (meeting_booked / sol_leads * 100 if sol_leads > 0 else 0) if meeting_booked > 0 else 0
+        #             md_sd_ratio = 0  # Initialize
+
+        #             sale_done = len(opportunities_df[
+        #                 (opportunities_df["Sales_Order_Number__c"].notna()) & 
+        #                 (opportunities_df["Sales_Order_Number__c"] != "None") & 
+        #                 (opportunities_df["Project__c"] == project)
+        #             ])
+        #             md_sd_ratio = (meeting_done / sale_done * 100 if sale_done > 0 else 0) if meeting_done > 0 else 0
+
+        #             project_funnel_data[project] = {
+        #                 "Total Leads": total_leads,
+        #                 "Valid Leads": valid_leads,
+        #                 "Sales Opportunity Leads (SOL)": sol_leads,
+        #                 "Meeting Booked": meeting_booked,
+        #                 "Meeting Done": meeting_done,
+        #                 "Sale Done": sale_done,
+        #                 "Disqualified Leads": disqualified_leads,
+        #                 "Disqualified %": round((disqualified_leads / total_leads * 100), 2) if total_leads > 0 else 0,
+        #                 "Open Leads": open_leads,
+        #                 "Junk %": round(junk_percentage, 2),
+        #                 "TL:VL Ratio (%)": round(tl_vl_ratio, 2) if tl_vl_ratio != "N/A" else 0,
+        #                 "VL:SOL Ratio (%)": round(vl_sol_ratio, 2) if vl_sol_ratio != "N/A" else 0,
+        #                 "SOL:MB Ratio (%)": round(sol_mb_ratio, 2) if sol_mb_ratio != "N/A" else 0,
+        #                 "MD:SD Ratio (%)": round(md_sd_ratio, 2) if md_sd_ratio != "N/A" else 0
+        #             }
+        #             project_graph_data[project] = {
+        #                 "Total Leads": total_leads,
+        #                 "Valid Leads": valid_leads,
+        #                 "Sales Opportunity Leads (SOL)": sol_leads,
+        #                 "Meeting Booked": meeting_booked,
+        #                 "Meeting Done": meeting_done,
+        #                 "Sale Done": sale_done
+        #             }
+
+        #         return {
+        #             "type": "project_wise_funnel",
+        #             "funnel_data": project_funnel_data,
+        #             "graph_data": {"Project Funnel Stages": project_graph_data},
+        #             "filtered_data": filtered_df,
+        #             "is_user_related": is_user_related,
+        #             "is_product_related": is_product_related,
+        #             "is_source_related": is_source_related,
+        #             "is_project_related": is_project_related,
+        #             "is_product_funnel": is_product_funnel,
+        #             "selected_quarter": selected_quarter
+        #         }
+        #     return {"type": "error", "message": f"Project-wise funnel not supported for {object_type}"}
+        
+        #======================================end of project wise funnel============================
+        #==================================new code for the source and user wise funnel=============
+        elif analysis_type == "source_wise_funnel":
+            if object_type == "lead":
+                required_fields = ["Customer_Feedback__c", "Status", "Is_Appointment_Booked__c", "LeadSource"]
+                missing_fields = [f for f in required_fields if f not in filtered_df.columns]
+                if missing_fields:
+                    return {"type": "error", "message": f"Missing fields: {missing_fields}"}
+
+                
+                
+                filtered_events = events_df.merge(
+                    filtered_df[["OwnerId", "LeadSource"]],
+                    left_on="CreatedById",
+                    right_on="OwnerId",
+                    how="left"
+                ).dropna(subset=["LeadSource"])
+
+
+                for field, value in filters.items():
+                    if field in filtered_events.columns:
+                        if isinstance(value, str):
+                            filtered_events = filtered_events[filtered_events[field] == value]
+                        elif isinstance(value, dict):
+                            if field == "CreatedDate":
+                                if "$gte" in value:
+                                    gte_value = pd.to_datetime(value["$gte"], utc=True)
+                                    filtered_events = filtered_events[filtered_events[field] >= gte_value]
+                                if "$lte" in value:
+                                    lte_value = pd.to_datetime(value["$lte"], utc=True)
+                                    filtered_events = filtered_events[filtered_events[field] <= lte_value]
+
+                # Group by LeadSource
+                grouped_df = filtered_df.groupby("LeadSource")
+                source_funnel_data = {}
+                source_graph_data = {}
+
+                for source, group in grouped_df:
+                    total_leads = len(group)
+                    valid_leads = len(group[group["Customer_Feedback__c"] != 'Junk'])
+                    sol_leads = len(group[group["Status"] == "Qualified"])
+                    meeting_booked = len(group[
+                        (group["Status"] == "Qualified") & (group["Is_Appointment_Booked__c"] == True)
+                    ])
+                    source_meetings = filtered_events[filtered_events["LeadSource"] == source]
+                    meeting_done = len(source_meetings[source_meetings["Appointment_Status__c"] == "Completed"])
+                    disqualified_leads = len(group[group["Customer_Feedback__c"] == "Not Interested"])
+                    open_leads = len(group[group["Status"].isin(["New", "Nurturing"])])
+                    junk_percentage = ((total_leads - valid_leads) / total_leads * 100) if total_leads > 0 else 0
+                    tl_vl_ratio = (valid_leads / total_leads * 100) if total_leads > 0 else 0
+                    vl_sol_ratio = (valid_leads / sol_leads * 100 if sol_leads > 0 else 0) if valid_leads > 0 else 0
+                    sol_mb_ratio = (meeting_booked / sol_leads * 100 if sol_leads > 0 else 0) if meeting_booked > 0 else 0
+                    md_sd_ratio = 0
+
+                    sale_done = len(opportunities_df[
+                        (opportunities_df["Sales_Order_Number__c"].notna()) & 
+                        (opportunities_df["Sales_Order_Number__c"] != "None") & 
+                        (opportunities_df["LeadSource"] == source)
+                    ])
+                    md_sd_ratio = (meeting_done / sale_done * 100 if sale_done > 0 else 0) if meeting_done > 0 else 0
+
+                    source_funnel_data[source] = {
+                        "Total Leads": total_leads,
+                        "Valid Leads": valid_leads,
+                        "Sales Opportunity Leads (SOL)": sol_leads,
+                        "Meeting Booked": meeting_booked,
+                        "Meeting Done": meeting_done,
+                        "Sale Done": sale_done,
+                        "Disqualified Leads": disqualified_leads,
+                        "Disqualified %": round((disqualified_leads / total_leads * 100), 2) if total_leads > 0 else 0,
+                        "Open Leads": open_leads,
+                        "Junk %": round(junk_percentage, 2),
+                        "TL:VL Ratio (%)": round(tl_vl_ratio, 2) if tl_vl_ratio != "N/A" else 0,
+                        "VL:SOL Ratio (%)": round(vl_sol_ratio, 2) if vl_sol_ratio != "N/A" else 0,
+                        "SOL:MB Ratio (%)": round(sol_mb_ratio, 2) if sol_mb_ratio != "N/A" else 0,
+                        "MD:SD Ratio (%)": round(md_sd_ratio, 2) if md_sd_ratio != "N/A" else 0
+                    }
+                    source_graph_data[source] = {
+                        "Total Leads": total_leads,
+                        "Valid Leads": valid_leads,
+                        "Sales Opportunity Leads (SOL)": sol_leads,
+                        "Meeting Booked": meeting_booked,
+                        "Meeting Done": meeting_done,
+                        "Sale Done": sale_done
+                    }
+
+                return {
+                    "type": "source_wise_funnel",
+                    "funnel_data": source_funnel_data,
+                    "graph_data": {"Source Funnel Stages": source_graph_data},
+                    "filtered_data": filtered_df,
+                    "is_user_related": is_user_related,
+                    "is_product_related": is_product_related,
+                    "is_source_related": is_source_related,
+                    "is_project_related": is_project_related,
+                    "is_product_funnel": is_product_funnel,
+                    "selected_quarter": selected_quarter
+                }
+            return {"type": "error", "message": f"Source-wise funnel not supported for {object_type}"}
+
+        elif analysis_type == "user_wise_funnel":
+           
+            if object_type == "lead":
+                required_fields = ["Customer_Feedback__c", "Status", "Is_Appointment_Booked__c", "OwnerId"]  # Adjust to your user field (e.g., CreatedById)
+                missing_fields = [f for f in required_fields if f not in filtered_df.columns]
+                if missing_fields:
+                    return {"type": "error", "message": f"Missing fields: {missing_fields}"}
+
+                
+
+                filtered_events = events_df.merge(
+                    filtered_df[["OwnerId"]].drop_duplicates(),
+                    left_on="OwnerId",
+                    right_on="OwnerId",
+                    how="inner"
+                )
+                
+                # Apply filters
+                for field, value in filters.items():
+                    if field in filtered_events.columns:
+                        if isinstance(value, str):
+                            filtered_events = filtered_events[filtered_events[field] == value]
+                        elif isinstance(value, dict):
+                            if field == "CreatedDate":
+                                if "$gte" in value:
+                                    gte_value = pd.to_datetime(value["$gte"], utc=True)
+                                    filtered_events = filtered_events[filtered_events[field] >= gte_value]
+                                if "$lte" in value:
+                                    lte_value = pd.to_datetime(value["$lte"], utc=True)
+                                    filtered_events = filtered_events[filtered_events[field] <= lte_value]
+
+                # Group leads by OwnerId
+                grouped_df = filtered_df.groupby("OwnerId")
+                user_funnel_data = {}
+                user_graph_data = {}
+
+                for user, group in grouped_df:
+                    total_leads = len(group)
+                    valid_leads = len(group[group["Customer_Feedback__c"] != 'Junk'])
+                    sol_leads = len(group[group["Status"] == "Qualified"])
+                    meeting_booked = len(group[
+                        (group["Status"] == "Qualified") & (group["Is_Appointment_Booked__c"] == True)
+                    ])
+                    
+                    # Events where Event.OwnerId == current user
+                    user_meetings = filtered_events[filtered_events["OwnerId"] == user]
+                    meeting_done = len(user_meetings[user_meetings["Appointment_Status__c"] == "Completed"])
+
+                    disqualified_leads = len(group[group["Customer_Feedback__c"] == "Not Interested"])
+                    open_leads = len(group[group["Status"].isin(["New", "Nurturing"])])
+                    junk_percentage = ((total_leads - valid_leads) / total_leads * 100) if total_leads > 0 else 0
+                    tl_vl_ratio = (valid_leads / total_leads * 100) if total_leads > 0 else 0
+                    vl_sol_ratio = (valid_leads / sol_leads * 100 if sol_leads > 0 else 0) if valid_leads > 0 else 0
+                    sol_mb_ratio = (meeting_booked / sol_leads * 100 if sol_leads > 0 else 0) if meeting_booked > 0 else 0
+                    md_sd_ratio = 0
+
+                    # Opportunities created by this user
+                    sale_done = len(opportunities_df[
+                        (opportunities_df["Sales_Order_Number__c"].notna()) &
+                        (opportunities_df["Sales_Order_Number__c"] != "None") &
+                        (opportunities_df["CreatedById"] == user)
+                    ])
+                    md_sd_ratio = (meeting_done / sale_done * 100 if sale_done > 0 else 0) if meeting_done > 0 else 0
+
+                    user_funnel_data[user] = {
+                        "Total Leads": total_leads,
+                        "Valid Leads": valid_leads,
+                        "Sales Opportunity Leads (SOL)": sol_leads,
+                        "Meeting Booked": meeting_booked,
+                        "Meeting Done": meeting_done,
+                        "Sale Done": sale_done,
+                        "Disqualified Leads": disqualified_leads,
+                        "Disqualified %": round((disqualified_leads / total_leads * 100), 2) if total_leads > 0 else 0,
+                        "Open Leads": open_leads,
+                        "Junk %": round(junk_percentage, 2),
+                        "TL:VL Ratio (%)": round(tl_vl_ratio, 2),
+                        "VL:SOL Ratio (%)": round(vl_sol_ratio, 2),
+                        "SOL:MB Ratio (%)": round(sol_mb_ratio, 2),
+                        "MD:SD Ratio (%)": round(md_sd_ratio, 2)
+                    }
+                    user_graph_data[user] = {
+                        "Total Leads": total_leads,
+                        "Valid Leads": valid_leads,
+                        "Sales Opportunity Leads (SOL)": sol_leads,
+                        "Meeting Booked": meeting_booked,
+                        "Meeting Done": meeting_done,
+                        "Sale Done": sale_done
+                    }
+
+                return {
+                    "type": "user_wise_funnel",
+                    "funnel_data": user_funnel_data,
+                    "graph_data": {"User Funnel Stages": user_graph_data},
+                    "filtered_data": filtered_df,
+                    "is_user_related": is_user_related,
+                    "is_product_related": is_product_related,
+                    "is_source_related": is_source_related,
+                    "is_project_related": is_project_related,
+                    "is_product_funnel": is_product_funnel,
+                    "selected_quarter": selected_quarter
+                }
+            return {"type": "error", "message": f"User-wise funnel not supported for {object_type}"}
+        
+        elif analysis_type == "product_wise_lead":
+            if object_type == "lead":
+                required_fields = ["Project_Category__c"]
+                missing_fields = [f for f in required_fields if f not in filtered_df.columns]
+                if missing_fields:
+                    return {"type": "error", "message": f"Missing fields: {missing_fields}"}
+                funnel_data = filtered_df.groupby("Project_Category__c").size().reset_index(name="Count")
+                graph_data["Project_Category__c"] = funnel_data.set_index("Project_Category__c")["Count"].to_dict()
+                return {
+                    "type": "product_wise_lead",
+                    "fields": fields,
+                    "funnel_data": funnel_data,
+                    "graph_data": graph_data,
+                    "filtered_data": filtered_df,
+                    "is_product_related": is_product_related,
+                    "is_source_related": is_source_related,
+                    "is_project_related": is_project_related,
+                    "selected_quarter": selected_quarter
+                }
+            return {"type": "error", "message": f"Product-wise lead not supported for {object_type}"}
+        #======================end of code========================================================
+        # Handle conversion funnel analysis
         elif analysis_type == "conversion_funnel":
             if object_type == "lead":
                 required_fields = ["Customer_Feedback__c", "Status", "Is_Appointment_Booked__c"]
                 missing_fields = [f for f in required_fields if f not in filtered_df.columns]
                 if missing_fields:
-                    logger.error(f"Missing fields for conversion_funnel: {missing_fields}")
                     return {"type": "error", "message": f"Missing fields: {missing_fields}"}
 
                 filtered_events = events_df.copy()
@@ -1843,28 +2645,39 @@ def execute_analysis(analysis_plan, leads_df, users_df, cases_df, events_df, opp
                 meeting_booked = len(filtered_df[
                     (filtered_df["Status"] == "Qualified") & (filtered_df["Is_Appointment_Booked__c"] == True)
                 ])
-                meeting_done = len(filtered_events[(filtered_events["Appointment_Status__c"] == "Completed")])
+                meeting_done = len(filtered_events[filtered_events["Appointment_Status__c"] == "Completed"])
                 disqualified_leads = len(filtered_df[filtered_df["Customer_Feedback__c"] == "Not Interested"])
-                # Calculate percentage of disqualified leads
-                disqualified_percentage = (disqualified_leads / total_leads * 100) if total_leads > 0 else 0
                 open_leads = len(filtered_df[filtered_df["Status"].isin(["New", "Nurturing"])])
                 junk_percentage = ((total_leads - valid_leads) / total_leads * 100) if total_leads > 0 else 0
+                
                 vl_sol_ratio = (valid_leads / sol_leads) if sol_leads > 0 else "N/A"
-                tl_vl_ratio = (total_leads / valid_leads) if valid_leads > 0 else "N/A"
+                tl_vl_ratio  = (valid_leads / total_leads) if total_leads > 0 else "N/A"
                 sol_mb_ratio = (sol_leads / meeting_booked) if meeting_booked > 0 else "N/A"
                 meeting_booked_meeting_done = (meeting_done / meeting_booked) if meeting_done > 0 else "N/A"
+                sale_done = len(opportunities_df[opportunities_df["Sales_Order_Number__c"].notna() & (opportunities_df["Sales_Order_Number__c"] != "None")])
+                md_sd_ratio = (meeting_done / sale_done) if sale_done > 0 else "N/A"
+
+                # Apply user-based filtering if specified
                 funnel_metrics = {
                     "TL:VL Ratio": round(tl_vl_ratio, 2) if isinstance(tl_vl_ratio, (int, float)) else tl_vl_ratio,
                     "VL:SOL Ratio": round(vl_sol_ratio, 2) if isinstance(vl_sol_ratio, (int, float)) else vl_sol_ratio,
                     "SOL:MB Ratio": round(sol_mb_ratio, 2) if isinstance(sol_mb_ratio, (int, float)) else sol_mb_ratio,
                     "MB:MD Ratio": round(meeting_booked_meeting_done, 2) if isinstance(meeting_booked_meeting_done, (int, float)) else meeting_booked_meeting_done,
+                    "MD:SD Ratio": round(md_sd_ratio, 2) if isinstance(md_sd_ratio, (int, float)) else md_sd_ratio,
+                    "Total Leads": total_leads,
+                    "Valid Leads": valid_leads,
+                    "Sales Opportunity Leads (SOL)": sol_leads,
+                    "Meeting Booked": meeting_booked,
+                    "Meeting Done": meeting_done,
+                    "Sale Done": sale_done,
                 }
                 graph_data["Funnel Stages"] = {
                     "Total Leads": total_leads,
                     "Valid Leads": valid_leads,
                     "Sales Opportunity Leads (SOL)": sol_leads,
                     "Meeting Booked": meeting_booked,
-                    "Meeting Done": meeting_done
+                    "Meeting Done": meeting_done,
+                    "Sale Done": sale_done,
                 }
                 return {
                     "type": "conversion_funnel",
@@ -1875,19 +2688,24 @@ def execute_analysis(analysis_plan, leads_df, users_df, cases_df, events_df, opp
                         "Sales Opportunity Leads (SOL)": sol_leads,
                         "Meeting Booked": meeting_booked,
                         "Disqualified Leads": disqualified_leads,
-                        "Disqualified %": round(disqualified_percentage, 2),  # Add percentage
+                        "Disqualified %": round((disqualified_leads / total_leads * 100), 2) if total_leads > 0 else 0,
                         "Open Leads": open_leads,
                         "Junk %": round(junk_percentage, 2),
                         "VL:SOL Ratio": round(vl_sol_ratio, 2) if isinstance(vl_sol_ratio, (int, float)) else vl_sol_ratio,
-                        "SOL:MB Ratio": round(sol_mb_ratio, 2) if isinstance(sol_mb_ratio, (int, float)) else sol_mb_ratio
+                        "SOL:MB Ratio": round(sol_mb_ratio, 2) if isinstance(sol_mb_ratio, (int, float)) else sol_mb_ratio,
+                        "MD:SD Ratio": round(md_sd_ratio, 2) if isinstance(md_sd_ratio, (int, float)) else md_sd_ratio
                     }},
                     "graph_data": graph_data,
                     "filtered_data": filtered_df,
-                    "is_sales_related": is_sales_related,
+                    "is_user_related": is_user_related,
+                    "is_product_related": is_product_related,
+                    "is_source_related": is_source_related,
+                    "is_project_related": is_project_related,
                     "selected_quarter": selected_quarter
                 }
             return {"type": "error", "message": f"Conversion funnel not supported for {object_type}"}
 
+      
         elif analysis_type == "Total_Appointment":
             if object_type == "event":
                 required_fields = ["Appointment_Status__c"]
@@ -1999,7 +2817,7 @@ def render_graph(graph_data, relevant_fields, title_suffix="", quarterly_data=No
             # Get the stages from quarterly_data that match the table
             table_stages = list(quarterly_data.keys())
             # Only include stages that are both in graph_data and quarterly_data
-            filtered_funnel_data = {stage: data[stage] for stage in data if stage in ["Total Leads", "Valid Leads", "Sales Opportunity Leads (SOL)", "Meeting Booked", "Meeting Done"]}
+            filtered_funnel_data = {stage: data[stage] for stage in data if stage in ["Total Leads", "Valid Leads", "Sales Opportunity Leads (SOL)", "Meeting Booked", "Meeting Done", "Sale Done"]}
             if not filtered_funnel_data:
                 logger.warning("No matching funnel stages found between graph_data and table data")
                 st.info("No matching data for funnel graph.")
@@ -2018,6 +2836,25 @@ def render_graph(graph_data, relevant_fields, title_suffix="", quarterly_data=No
             except Exception as e:
                 logger.error(f"Error rendering Plotly funnel chart: {e}")
                 st.error(f"Failed to render graph: {str(e)}")
+                
+        elif field == "Product Funnel Stages":
+            for product, stages in data.items():
+                plot_df = pd.DataFrame.from_dict(stages, orient='index', columns=['Count']).reset_index()
+                plot_df.columns = ["Stage", "Count"]
+                plot_df = plot_df[plot_df["Stage"].isin(["Total Leads", "Valid Leads", "Sales Opportunity Leads (SOL)", "Meeting Booked", "Meeting Done", "Sale Done"])]
+                try:
+                    fig = go.Figure(go.Funnel(
+                        y=plot_df["Stage"],
+                        x=plot_df["Count"],
+                        textinfo="value+percent initial",
+                        marker={"color": "#1f77b4"}
+                    ))
+                    fig.update_layout(title=f"Product-Wise Funnel for {product}{title_suffix}")
+                    st.plotly_chart(fig, use_container_width=True)
+                except Exception as e:
+                    logger.error(f"Error rendering Plotly product funnel chart for {product}: {e}")
+                    st.error(f"Failed to render product funnel graph for {product}: {str(e)}")
+        
         else:
             plot_data = [{"Category": str(k), "Count": v} for k, v in data.items() if k is not None and not pd.isna(k)]
             if not plot_data:
@@ -2047,6 +2884,7 @@ def display_analysis_result(result, analysis_plan=None, user_question=""):
     object_type = analysis_plan.get("object_type", "lead") if analysis_plan else "lead"
     is_product_related = result.get("is_product_related", False)
     is_sales_related = result.get("is_sales_related", False)
+    is_product_funnel = result.get("is_product_funnel", False)
     selected_quarter = result.get("selected_quarter", None)
     graph_data = result.get("graph_data", {})
     filtered_data = result.get("filtered_data", pd.DataFrame())
@@ -2078,7 +2916,7 @@ def display_analysis_result(result, analysis_plan=None, user_question=""):
             if object_type == "case"
             else ['Id', 'Subject', 'StartDateTime', 'EndDateTime', 'Appointment_Status__c', 'CreatedDate']
             if object_type == "event"
-            else ['Id', 'Name', 'StageName', 'Amount', 'CloseDate', 'CreatedDate']
+            else ['Id', 'Name', 'StageName', 'Amount', 'CloseDate', 'CreatedDate', 'Project_Category__c', 'Sales_Order_Number__c']
             if object_type == "opportunity"
             else ['Id', 'Subject', 'Transfer_Status__c', 'Customer_Feedback__c', 'Sales_Team_Feedback__c', 'Status', 'Follow_Up_Status__c']
             if object_type == "task"
@@ -2094,7 +2932,7 @@ def display_analysis_result(result, analysis_plan=None, user_question=""):
         return display_data, display_cols
 
     title_suffix = ""
-    if result_type == "quarterly_distribution" and selected_quarter:
+    if result_type in ["quarterly_distribution", "product_wise_lead"] and selected_quarter:
         normalized_quarter = selected_quarter.strip()
         title_suffix = f" in {normalized_quarter}"
         logger.info(f"Selected quarter for display: '{normalized_quarter}' (length: {len(normalized_quarter)})")
@@ -2111,7 +2949,7 @@ def display_analysis_result(result, analysis_plan=None, user_question=""):
         st.subheader(f"Opportunity vs Lead Summary{title_suffix}")
         df = pd.DataFrame(result["data"])
         st.dataframe(df.rename(columns=FIELD_DISPLAY_NAMES), use_container_width=True, hide_index=True)
-    # Existing result types
+
     elif result_type == "metric":
         logger.info("Rendering metric result")
         st.metric(result.get("label", "Result"), f"{result.get('value', 0)}")
@@ -2145,6 +2983,7 @@ def display_analysis_result(result, analysis_plan=None, user_question=""):
             st.dataframe(status_df, use_container_width=True, hide_index=True)
         else:
             st.warning("No appointment status data available.")
+
         # Display the funnel metrics table (ratios)
         if funnel_metrics:
             st.subheader("Funnel Metrics")
@@ -2152,6 +2991,174 @@ def display_analysis_result(result, analysis_plan=None, user_question=""):
             metrics_df.columns = ["Metric", "Value"]
             st.dataframe(metrics_df, use_container_width=True, hide_index=True)
 
+    
+    #=====================================prodcut wise funnel=========================
+    elif result_type == "product_wise_funnel":
+        logger.info("Rendering product-wise funnel")
+        funnel_data = result.get("funnel_data", {})
+        st.subheader(f"Product-Wise Funnel Analysis{title_suffix}")
+        st.info(f"Found {len(filtered_data)} leads matching the criteria.")
+
+        if not funnel_data:
+            st.warning("No funnel data available for any product.")
+            return
+
+        # Prepare data for a single table
+        metrics_list = []
+        products = list(funnel_data.keys())
+        if products:
+            # Get all unique metrics from the first product's data (assuming all products have the same metrics)
+            all_metrics = list(funnel_data[products[0]].keys())
+            for metric in all_metrics:
+                row = {"Metric": metric}
+                for product in products:
+                    row[product] = funnel_data[product][metric]
+                metrics_list.append(row)
+
+            # Create a DataFrame
+            funnel_df = pd.DataFrame(metrics_list)
+            # Ensure numeric columns are formatted properly
+            for product in products:
+                funnel_df[product] = pd.to_numeric(funnel_df[product], errors='ignore')
+            funnel_df = funnel_df.round(2)  # Round to 2 decimal places for percentages and ratios
+
+            # Display the table
+            st.dataframe(funnel_df, use_container_width=True, hide_index=True)
+
+        if st.button("Show Data", key=f"product_funnel_data_{result_type}_{selected_quarter}"):
+            st.write(f"Filtered {object_type.capitalize()} Data")
+            display_data, display_cols = prepare_filtered_display_data(filtered_data, analysis_plan)
+            st.dataframe(display_data, use_container_width=True, hide_index=True)
+
+    #===================================project wise funnel============================
+    # elif result_type == "project_wise_funnel":
+    #     logger.info("Rendering project-wise funnel")
+    #     funnel_data = result.get("funnel_data", {})
+    #     st.subheader(f"Project-Wise Funnel Analysis{title_suffix}")
+    #     st.info(f"Found {len(filtered_data)} leads matching the criteria.")
+
+    #     if not funnel_data:
+    #         st.warning("No funnel data available for any project.")
+    #         return
+
+    #     # Prepare data for a single table
+    #     metrics_list = []
+    #     projects = list(funnel_data.keys())
+    #     if projects:
+    #         # Get all unique metrics from the first project's data (assuming all projects have the same metrics)
+    #         all_metrics = list(funnel_data[projects[0]].keys())
+    #         for metric in all_metrics:
+    #             row = {"Metric": metric}
+    #             for project in projects:
+    #                 row[project] = funnel_data[project][metric]
+    #             metrics_list.append(row)
+
+    #         # Create a DataFrame
+    #         funnel_df = pd.DataFrame(metrics_list)
+    #         # Ensure numeric columns are formatted properly
+    #         for project in projects:
+    #             funnel_df[project] = pd.to_numeric(funnel_df[project], errors='ignore')
+    #         funnel_df = funnel_df.round(2)  # Round to 2 decimal places for percentages and ratios
+
+    #         # Display the table
+    #         st.dataframe(funnel_df, use_container_width=True, hide_index=True)
+
+    #     if st.button("Show Data", key=f"project_funnel_data_{result_type}_{selected_quarter}"):
+    #         st.write(f"Filtered {object_type.capitalize()} Data")
+    #         display_data, display_cols = prepare_filtered_display_data(filtered_data, analysis_plan)
+    #         st.dataframe(display_data, use_container_width=True, hide_index=True)
+    
+    
+    #=====================================end of project wise funnel=======================
+
+    #===========================new code for the funnel and user wise===================
+    elif result_type == "source_wise_funnel":
+        logger.info("Rendering source-wise funnel")
+        funnel_data = result.get("funnel_data", {})
+        st.subheader(f"Source-Wise Funnel Analysis{title_suffix}")
+        st.info(f"Found {len(filtered_data)} leads matching the criteria.")
+
+        if not funnel_data:
+            st.warning("No funnel data available for any source.")
+            return
+
+        # Prepare data for a single table
+        metrics_list = []
+        sources = list(funnel_data.keys())
+        if sources:
+            all_metrics = list(funnel_data[sources[0]].keys())
+            for metric in all_metrics:
+                row = {"Metric": metric}
+                for source in sources:
+                    row[source] = funnel_data[source][metric]
+                metrics_list.append(row)
+
+            funnel_df = pd.DataFrame(metrics_list)
+            for source in sources:
+                funnel_df[source] = pd.to_numeric(funnel_df[source], errors='ignore')
+            funnel_df = funnel_df.round(2)
+
+            st.dataframe(funnel_df, use_container_width=True, hide_index=True)
+
+        if st.button("Show Data", key=f"source_funnel_data_{result_type}_{selected_quarter}"):
+            st.write(f"Filtered {object_type.capitalize()} Data")
+            display_data, display_cols = prepare_filtered_display_data(filtered_data, analysis_plan)
+            st.dataframe(display_data, use_container_width=True, hide_index=True)
+
+    elif result_type == "user_wise_funnel":
+        logger.info("Rendering user-wise funnel")
+        
+        funnel_data = result.get("funnel_data", {})
+        st.subheader(f"User-Wise Funnel Analysis{title_suffix}")
+        st.info(f"Found {len(filtered_data)} leads matching the criteria.")
+
+        if not funnel_data:
+            st.warning("No funnel data available for any user.")
+            return
+
+        # Prepare data for a single table
+        metrics_list = []
+        users = list(funnel_data.keys())
+        if users:
+            all_metrics = list(funnel_data[users[0]].keys())
+            for metric in all_metrics:
+                row = {"Metric": metric}
+                for user in users:
+                    row[user] = funnel_data[user][metric]
+                metrics_list.append(row)
+
+            funnel_df = pd.DataFrame(metrics_list)
+            for user in users:
+                funnel_df[user] = pd.to_numeric(funnel_df[user], errors='ignore')
+            funnel_df = funnel_df.round(2)
+
+            st.dataframe(funnel_df, use_container_width=True, hide_index=True)
+
+        if st.button("Show Data", key=f"user_funnel_data_{result_type}_{selected_quarter}"):
+            st.write(f"Filtered {object_type.capitalize()} Data")
+            display_data, display_cols = prepare_filtered_display_data(filtered_data, analysis_plan)
+            st.dataframe(display_data, use_container_width=True, hide_index=True)
+    #===================================new code===========================
+    elif result_type == "product_wise_lead":
+        logger.info("Rendering product-wise lead summary")
+        funnel_data = result.get("funnel_data", pd.DataFrame())
+        st.subheader(f"Product-Wise Lead Summary{title_suffix}")
+        st.info(f"Found {len(filtered_data)} leads matching the criteria.")
+
+        if st.button("Show Data", key=f"product_lead_data_{result_type}_{selected_quarter}"):
+            st.write(f"Filtered {object_type.capitalize()} Data")
+            display_data, display_cols = prepare_filtered_display_data(filtered_data, analysis_plan)
+            st.dataframe(display_data, use_container_width=True, hide_index=True)
+
+        if not funnel_data.empty:
+            st.subheader("Product-Wise Lead Counts")
+            st.info("Counts grouped by Product Category")
+            # Ensure only 'Project_Category__c' and 'Count' are displayed
+            funnel_data = funnel_data[['Project_Category__c', 'Count']].sort_values(by="Count", ascending=False)
+            # Rename 'Project_Category__c' to 'product' for clarity
+            funnel_data = funnel_data.rename(columns={"Project_Category__c": "product"})
+            st.dataframe(funnel_data, use_container_width=True, hide_index=True)
+   
     elif result_type == "quarterly_distribution":
         logger.info("Rendering quarterly distribution")
         fields = result.get("fields", [])
@@ -2219,7 +3226,7 @@ def display_analysis_result(result, analysis_plan=None, user_question=""):
         quarter_df = quarter_df.sort_values(by="Count", ascending=False)
         st.dataframe(quarter_df, use_container_width=True, hide_index=True)
 
-    elif result_type == "source_wise_funnel":
+    elif result_type == "source_wise_lead":
         logger.info("Rendering source-wise funnel")
         funnel_data = result.get("funnel_data", pd.DataFrame())
         st.subheader(f"{object_type.capitalize()} Results{title_suffix}")
@@ -2286,7 +3293,6 @@ def display_analysis_result(result, analysis_plan=None, user_question=""):
         st.error(result.get("message", "An error occurred"))
         return
     
-    #================================new code for the user===============
     elif result_type == "user_meeting_summary":
         logger.info("Rendering user-wise meeting summary")
         st.subheader(f"User-Wise Meeting Done Summary{title_suffix}")
@@ -2303,7 +3309,6 @@ def display_analysis_result(result, analysis_plan=None, user_question=""):
         st.subheader(f"Department-Wise User Meeting Done Summary{title_suffix}")
         df = pd.DataFrame(result["data"])
         if not df.empty:
-        # Use the columns from the result to dynamically rename
             column_mapping = {col: col_display_name.get(col, col) for col in result["columns"]}
             st.dataframe(df.rename(columns=column_mapping), use_container_width=True, hide_index=True)
             total_meetings = result.get("total", 0)  # Safely get total, default to 0 if not present
@@ -2321,7 +3326,6 @@ def display_analysis_result(result, analysis_plan=None, user_question=""):
             st.info(f"Total sales orders: {total_sales}")
         else:
             st.warning("No sales order data found for the selected criteria.")
-    #============================end of code==============================
 
     # Show Graph button for all applicable result types
     if result_type not in ["info", "error"]:
@@ -2341,24 +3345,23 @@ def display_analysis_result(result, analysis_plan=None, user_question=""):
                 # For conversion funnel, we pass quarterly_data to align funnel stages with the table
                 quarterly_data_for_graph = result.get("quarterly_data", {}).get(selected_quarter, {})
                 render_graph(graph_data, ["Funnel Stages"], title_suffix, quarterly_data=quarterly_data_for_graph)
-            #=================================new code for the user=================
+            elif result_type == "product_wise_funnel":
+                render_graph(graph_data, ["Product Funnel Stages"], title_suffix, quarterly_data=funnel_data)
+            
             elif result_type == "user_sales_summary":
                 relevant_graph_fields = ["User_Sales"]
                 render_graph(graph_data, relevant_graph_fields, title_suffix)
-                
             elif result_type == "dept_user_meeting_summary":
                 relevant_graph_fields = ["Dept_Meeting_Done"]
                 render_graph(graph_data, relevant_graph_fields, title_suffix)
-            
             elif result_type == "user_meeting_summary":
                 relevant_graph_fields = ["User_Meeting_Done"]
                 render_graph(graph_data, relevant_graph_fields, title_suffix)
-            #=================================end of code==========================
             else:
                 render_graph(graph_data, relevant_graph_fields, title_suffix)
 
         # Add Export to CSV option for applicable result types
-        if result_type in ["table", "distribution", "quarterly_distribution", "source_wise_funnel", "conversion_funnel"]:
+        if result_type in ["table", "distribution", "quarterly_distribution", "source_wise_lead", "product_wise_lead", "conversion_funnel", "product_wise_funnel"]:
             if not filtered_data.empty:
                 export_key = f"export_data_{result_type}_{selected_quarter}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
                 if st.button("Export Data to CSV", key=export_key):
@@ -2376,7 +3379,7 @@ if __name__ == "__main__":
         st.cache_data.clear()
         st.cache_resource.clear()
         st.success("Cache cleared successfully!")
-    user_question = st.text_input("Enter your query:", "lead conversion funnel in Q4")
+    user_question = st.text_input("Enter your query:", "product-wise sale")
     if st.button("Analyze"):
         # Sample data for testing
         sample_data = {
@@ -2428,35 +3431,23 @@ if __name__ == "__main__":
         cases_df = pd.DataFrame()
         events_df = pd.DataFrame({ "Status": ["Completed"],  # Added sample task data to test Meeting Done
             "CreatedDate": ["2025-02-15T10:00:00Z", "2025-02-15T11:00:00Z"]})
-        opportunities_df = pd.DataFrame()
+        opportunities_df = pd.DataFrame({
+            "Sales_Order_Number__c": [123, None, 456, 789],
+            "Project_Category__c": ["VERIDIA", "ELIGO", "EDEN", "WAVE GARDEN"],
+            "CreatedDate": ["2025-02-15T10:00:00Z", "2025-02-15T11:00:00Z", "2025-02-15T12:00:00Z", "2025-02-15T13:00:00Z"]
+        })
         task_df = pd.DataFrame({
             "Status": ["Completed", "Open"],  # Added sample task data to test Meeting Done
             "CreatedDate": ["2025-02-15T10:00:00Z", "2025-02-15T11:00:00Z"]
         })
 
-        # Analysis plan for conversion funnel
+        # Analysis plan for product-wise sale
         analysis_plan = {
-            "analysis_type": "conversion_funnel",
-            "object_type": "lead",
-            "fields": [],
-            "quarter": "Q1 - Q4",
-            "filters": {}
-        }
-        #========================new code=====================
-        analysis_plan = {
-            "analysis_type": "user_sales_summary",
+            "analysis_type": "distribution",
             "object_type": "opportunity",
-            "fields": [],
+            "fields": ["Project_Category__c"],
             "quarter": "Q1 - Q4",
             "filters": {}
         }
-        analysis_plan = {
-            "analysis_type": "dept_user_meeting_summary",
-            "object_type": "event",
-            "fields": [],
-            "quarter": "Q1 - Q4",
-            "filters": {}
-        }
-        #=============================end of code======================
         result = execute_analysis(analysis_plan, leads_df, users_df, cases_df, events_df, opportunities_df, task_df, user_question)
         display_analysis_result(result, analysis_plan, user_question)
