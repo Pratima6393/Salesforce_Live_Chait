@@ -5,13 +5,7 @@ import json
 from datetime import datetime
 
 from config import *
-from watsonx_utils import (
-    validate_watsonx_config,
-    create_data_context,
-    query_watsonx_ai,
-    parse_intent_fallback,
-    get_watsonx_token
-)
+from watsonx_utils import *
 from salesforce_utils import load_salesforce_data
 from analysis_engine import execute_analysis, display_analysis_result
 from ai import summarize_analysis_result_with_ai  # AI summarizer with chunking
